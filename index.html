@@ -260,6 +260,15 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 .st-goalline{position:absolute;top:0;bottom:0;border-left:2px dashed rgba(43,39,35,.25)}
 .st-note{font-size:12px;color:var(--ink-soft);margin-top:10px}
 
+/* cloud sync */
+.sync-input{width:100%;padding:11px 13px;font-size:14px;border:2px solid #E3DCCE;border-radius:12px;margin:6px 0;background:var(--paper);font-family:var(--ui)}
+.sync-row{display:flex;gap:8px}
+.sync-row .sync-input{flex:1}
+.sync-status{font-size:13px;font-weight:800;margin:10px 0;color:var(--ink-soft)}
+.sync-status.ok{color:var(--jade)}
+.sync-status.err{color:var(--red)}
+.sync-note{font-size:12px;color:var(--ink-soft);margin-top:10px;text-align:left}
+
 /* bottom sheet */
 #sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;transform:translateY(110%);transition:transform .22s ease;padding:0 12px 12px}
 #sheet.open{transform:translateY(0)}
@@ -440,6 +449,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
       <div class="pf-sub">Who's learning today? Tap your picture.</div>
       <div class="pf-grid" id="pfGrid"></div>
       <button class="pf-manage" id="pfManage">管理 manage profiles</button>
+      &nbsp;&nbsp;<button class="pf-manage" id="pfSyncBtn">☁️ 云同步 sync</button>
     </div>
 
     <div id="pfCreate" class="hidden">
@@ -451,6 +461,23 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
         <button class="pbtn primary hz" id="pfNext" style="width:100%">下一步 →<span class="py">NEXT — SET PASSCODE</span></button>
       </div>
       <button class="pf-back" id="pfCreateBack">← 返回 back</button>
+    </div>
+
+    <div id="pfSync" class="hidden">
+      <div class="pf-h">云同步</div>
+      <div class="pf-sub">Enter the same database link and family code on every tablet.</div>
+      <div class="pf-panel" style="max-width:460px">
+        <input class="sync-input" id="syncUrl" placeholder="Database URL (https://…firebasedatabase.app)">
+        <div class="sync-row">
+          <input class="sync-input" id="syncCode" placeholder="Family code">
+          <button class="pbtn ghost hz" id="syncGen" style="padding:8px 14px">生成<span class="py">GENERATE</span></button>
+        </div>
+        <div class="sync-status" id="syncStatus">未连接 · not connected</div>
+        <button class="pbtn primary hz" id="syncSave" style="width:100%">保存并同步<span class="py">SAVE &amp; SYNC NOW</span></button>
+        <button class="pbtn ghost hz" id="syncOff" style="width:100%;margin-top:8px">断开<span class="py">DISCONNECT THIS TABLET</span></button>
+        <div class="sync-note">Progress merges safely between tablets: rep counts take the highest value, tricky-character stars combine, and the newest session wins. Keep the family code secret — anyone who has it can read this data.</div>
+      </div>
+      <button class="pf-back" id="pfSyncBack">← 返回 back</button>
     </div>
 
     <div id="pfStats" class="hidden">
@@ -536,6 +563,7 @@ async function stGet(k){
 async function stSet(k,v){
   k = nsKey(k);
   mem[k]=v;
+  if(!syncApplying && (k.indexOf("p1-")>=0 || k==="hw-profiles")) scheduleSync();
   try{ if(window.storage){ await window.storage.set(k,v); return; } }catch(e){}
   try{ if(window.localStorage) localStorage.setItem(k,v); }catch(e){}
 }
@@ -551,6 +579,7 @@ const saveTricky = ()=>stSet("p1-tricky", JSON.stringify(tricky));
 let activeView = "viewWriteList";
 function collectSession(){
   return {
+    ts: Date.now(),
     view: activeView,
     char: cur, mode: mode,
     passage: curPassage ? curPassage.title : null,
@@ -1113,12 +1142,12 @@ async function loadProfiles(){
 }
 const saveProfiles = ()=>stSet("hw-profiles", JSON.stringify(profiles));
 const pfShow = id=>{
-  ["pfPick","pfCreate","pfPin","pfStats"].forEach(x=>document.getElementById(x).classList.toggle("hidden", x!==id));
+  ["pfPick","pfCreate","pfPin","pfStats","pfSync"].forEach(x=>document.getElementById(x).classList.toggle("hidden", x!==id));
 };
 
 async function renderPfGrid(){
   const g = document.getElementById("pfGrid"); g.innerHTML = "";
-  for(const p of profiles){
+  for(const p of profiles.filter(x=>!x.del)){
     let done = 0;
     try{ const raw = await stGet("u"+p.id+":p1-progress");
       if(raw){ const pr = JSON.parse(raw); done = Object.values(pr).filter(v=>v>=50).length; } }catch(e){}
@@ -1140,7 +1169,8 @@ async function renderPfGrid(){
 }
 function deleteProfile(p){
   if(!window.confirm("Delete "+p.name+"'s profile and all their progress?")) return;
-  profiles = profiles.filter(x=>x.id!==p.id);
+  const t = profiles.find(x=>x.id===p.id);
+  if(t){ t.del = true; t.mt = Date.now(); }
   saveProfiles();
   ["p1-progress","p1-tricky","p1-session","p1-stats"].forEach(k=>stSet("u"+p.id+":"+k, ""));
   manageMode = false; renderPfGrid();
@@ -1166,7 +1196,7 @@ function openCreate(){
 document.getElementById("pfCreateBack").onclick = ()=>pfShow("pfPick");
 document.getElementById("pfNext").onclick = ()=>{
   const name = document.getElementById("pfName").value.trim() || "小朋友";
-  pendingProfile = { id: Date.now().toString(36), name: name, av: chosenAv, pin: "" };
+  pendingProfile = { id: Date.now().toString(36), name: name, av: chosenAv, pin: "", mt: Date.now() };
   pinMode = "setup"; pinFirst = ""; pinBuf = "";
   openPinScreen();
 };
@@ -1235,8 +1265,9 @@ function askPin(p){
   pendingProfile = p; pinMode = "enter"; pinBuf = "";
   openPinScreen();
 }
-function enterProfile(p){
+async function enterProfile(p){
   PROFILE_PREFIX = "u"+p.id+":";
+  await syncNow(false);
   stSet("hw-active", p.id);
   const chip = document.getElementById("userChip");
   chip.classList.remove("hidden");
@@ -1325,12 +1356,143 @@ async function openStats(p){
 }
 document.getElementById("pfStatsBack").onclick = ()=>pfShow("pfPick");
 
+/* ================= CLOUD SYNC (Firebase RTDB via REST) ================= */
+let syncApplying = false, syncTimer = null, syncBusy = false, lastSyncAt = 0, lastSyncErr = "";
+async function getSyncCfg(){
+  try{ const raw = await stGet("hw-sync"); if(!raw) return null;
+    const c = JSON.parse(raw); return (c.url && c.code) ? c : null; }catch(e){ return null; }
+}
+const famUrl = c => c.url.replace(/\/+$/,"") + "/fam/" + c.code + ".json";
+function withTimeout(p, ms){ return Promise.race([p, new Promise((_,rj)=>setTimeout(()=>rj(new Error("timeout")), ms))]); }
+
+function mergeProgress(a,b){ const o = Object.assign({}, a||{});
+  for(const k in (b||{})) o[k] = Math.max(o[k]||0, b[k]||0); return o; }
+function mergeTricky(a,b){ return [...new Set([].concat(a||[], b||[]))]; }
+function mergeStats(a,b){ const o = JSON.parse(JSON.stringify(a||{}));
+  for(const day in (b||{})){ if(!o[day]) o[day] = {};
+    for(const f of ["sec","reps","dict","quiz"]) o[day][f] = Math.max(o[day][f]||0, (b[day]||{})[f]||0); }
+  return o; }
+function mergeSession(a,b){
+  if(!a) return b||null; if(!b) return a;
+  return ((a.ts||0) >= (b.ts||0)) ? a : b; }
+function mergeProfilesList(a,b){
+  const byId = {};
+  [].concat(a||[], b||[]).forEach(p=>{
+    if(!p || !p.id) return;
+    const cur = byId[p.id];
+    if(!cur || (p.mt||0) > (cur.mt||0)) byId[p.id] = p;
+  });
+  return Object.values(byId);
+}
+async function readUserLocal(id){
+  const out = {};
+  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"]]){
+    try{ const raw = await stGet("u"+id+":"+k); out[fld] = raw ? JSON.parse(raw) : null; }catch(e){ out[fld] = null; }
+  }
+  return out;
+}
+async function writeUserLocal(id, u){
+  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"]]){
+    if(u[fld]!==null && u[fld]!==undefined) await stSet("u"+id+":"+k, JSON.stringify(u[fld]));
+  }
+}
+async function syncNow(pushOnly){
+  const cfg = await getSyncCfg(); if(!cfg || syncBusy) return;
+  syncBusy = true;
+  try{
+    let cloud = null;
+    if(!pushOnly){
+      const r = await withTimeout(fetch(famUrl(cfg)), 6000);
+      if(r.ok) cloud = await r.json();
+    }
+    syncApplying = true;
+    // merge registry
+    profiles = mergeProfilesList(profiles, cloud && cloud.profiles);
+    await stSet("hw-profiles", JSON.stringify(profiles));
+    // merge each user
+    const users = {};
+    for(const p of profiles){
+      const loc = await readUserLocal(p.id);
+      const cld = (cloud && cloud.users && cloud.users[p.id]) || {};
+      const merged = {
+        progress: mergeProgress(loc.progress, cld.progress),
+        tricky: mergeTricky(loc.tricky, cld.tricky),
+        session: mergeSession(loc.session, cld.session),
+        stats: mergeStats(loc.stats, cld.stats)
+      };
+      await writeUserLocal(p.id, merged);
+      users[p.id] = merged;
+    }
+    syncApplying = false;
+    // refresh in-memory state of the active profile so tablet-hopping is truly live
+    if(booted){
+      try{
+        const raw = await stGet("p1-progress"); if(raw) progress = JSON.parse(raw);
+        const tr = await stGet("p1-tricky"); if(tr) tricky = JSON.parse(tr);
+      }catch(e){}
+    }
+    await withTimeout(fetch(famUrl(cfg), {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({profiles: profiles, users: users, up: Date.now()}), keepalive: true}), 6000);
+    lastSyncAt = Date.now(); lastSyncErr = "";
+  }catch(e){
+    lastSyncErr = String(e && e.message || e);
+  }finally{
+    syncApplying = false; syncBusy = false;
+    updateSyncStatus();
+  }
+}
+function scheduleSync(){ clearTimeout(syncTimer); syncTimer = setTimeout(()=>syncNow(false), 4000); }
+window.addEventListener("pagehide", ()=>{ syncNow(true); });
+
+async function updateSyncStatus(){
+  const el = document.getElementById("syncStatus"); if(!el) return;
+  const cfg = await getSyncCfg();
+  if(!cfg){ el.className = "sync-status"; el.textContent = "未连接 · not connected"; return; }
+  if(lastSyncErr){ el.className = "sync-status err"; el.textContent = "⚠ sync problem: "+lastSyncErr; }
+  else if(lastSyncAt){ el.className = "sync-status ok"; el.textContent = "✓ 已同步 synced "+new Date(lastSyncAt).toLocaleTimeString(); }
+  else{ el.className = "sync-status"; el.textContent = "已设置 · configured, waiting for first sync"; }
+}
+async function openSyncPanel(){
+  const cfg = await getSyncCfg();
+  if(cfg){ document.getElementById("syncUrl").value = cfg.url; document.getElementById("syncCode").value = cfg.code; }
+  updateSyncStatus();
+  pfShow("pfSync");
+}
+document.getElementById("pfSyncBtn").onclick = openSyncPanel;
+document.getElementById("pfSyncBack").onclick = ()=>{ renderPfGrid(); pfShow("pfPick"); };
+document.getElementById("syncGen").onclick = ()=>{
+  let code = "";
+  try{ const a = new Uint8Array(12); crypto.getRandomValues(a);
+    code = [...a].map(x=>x.toString(36).slice(-1)).join("") + Date.now().toString(36);
+  }catch(e){ code = Math.random().toString(36).slice(2) + Date.now().toString(36); }
+  document.getElementById("syncCode").value = "fam-" + code;
+};
+document.getElementById("syncSave").onclick = async ()=>{
+  const url = document.getElementById("syncUrl").value.trim().replace(/\/+$/,"");
+  const code = document.getElementById("syncCode").value.trim();
+  if(!/^https:\/\//.test(url) || code.length < 8){
+    lastSyncErr = "check the URL and use a code of 8+ characters"; updateSyncStatus(); return;
+  }
+  syncApplying = true;
+  await stSet("hw-sync", JSON.stringify({url: url, code: code}));
+  syncApplying = false;
+  lastSyncErr = ""; lastSyncAt = 0; updateSyncStatus();
+  await syncNow(false);
+  await renderPfGrid();
+};
+document.getElementById("syncOff").onclick = async ()=>{
+  if(!window.confirm("Disconnect this tablet from cloud sync? Local progress stays on this tablet.")) return;
+  syncApplying = true; await stSet("hw-sync",""); syncApplying = false;
+  lastSyncAt = 0; lastSyncErr = ""; updateSyncStatus();
+};
+
 /* ================= STARTUP ================= */
 (async function(){
   await loadProfiles();
+  if(await getSyncCfg()) await syncNow(false);
   let act = null;
   try{ act = await stGet("hw-active"); }catch(e){}
-  const p = profiles.find(x=>x.id===act);
+  const p = profiles.find(x=>x.id===act && !x.del);
   if(p){ enterProfile(p); } else { showProfileScreen(); }
 })();
 </script>
