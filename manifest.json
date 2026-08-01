@@ -1,0 +1,25 @@
+{
+  "name": "华文馆 Cosmic Chinese P1–P3",
+  "short_name": "华文馆",
+  "description": "Chinese writing, pinyin, dictation and reading practice for P1–P3",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAF7F0",
+  "theme_color": "#C8412B",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
