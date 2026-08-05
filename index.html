@@ -339,6 +339,19 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 #wtFocus .fw-sq{width:100%;aspect-ratio:1;position:relative}
 #wtFocus .fw-btns{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
 
+/* skill profile */
+.sk-wrap{text-align:left;max-width:440px;margin:14px auto 18px}
+.sk-row{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;margin-bottom:9px}
+.sk-lab{font-size:13px;font-weight:800;color:var(--ink)}
+.sk-lab b{display:block;font-size:11px;color:var(--ink-soft);font-weight:700}
+.sk-bar{position:relative;height:28px;background:var(--paper);border:1.5px solid #EAE3D6;border-radius:8px;overflow:hidden}
+.sk-bar i{display:block;height:100%;border-radius:6px;transition:width .5s}
+.sk-bar span{position:absolute;inset:0;display:flex;align-items:center;padding-left:8px;font-size:12px;font-weight:800;color:var(--ink)}
+.as-opt.wide{font-size:19px;text-align:left;line-height:1.5}
+.ad-focus{background:#FFF9EA;border:1.5px solid #EAD9A8;border-radius:12px;padding:8px 12px;margin-top:8px;
+  font-size:13px;font-weight:700;color:#6E5B22;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ad-focus .go{background:var(--gold);color:#fff;border-radius:8px;padding:5px 12px;font-weight:800;font-size:12px}
+
 /* bottom sheet */
 #sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;transform:translateY(110%);transition:transform .22s ease;padding:0 12px 12px}
 #sheet.open{transform:translateY(0)}
@@ -362,7 +375,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 <header>
   <div class="brand">
     <div class="seal">文</div>
-    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v12</small></h1>
+    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v13</small></h1>
   </div>
   <nav>
     <button class="tab hz" id="tabPy">拼音<span class="py">PINYIN</span></button>
@@ -1074,6 +1087,21 @@ document.getElementById("dictRight").onclick = ()=>{ dictOK++; statBump("dict",1
 document.getElementById("dictWrong").onclick = ()=>{ dictNo++; nextDictWord(true); };
 
 /* ================= ADAPTIVE ENGINE ================= */
+function profileStrip(prof){
+  const order = ["listen","read","tone","vocab","comp","write"];
+  let s = '<div style="font-size:12px;margin-top:5px;display:flex;gap:9px;flex-wrap:wrap">';
+  order.forEach(k=>{
+    if(!prof[k]) return;
+    const v = (prof[k].score!==undefined) ? prof[k].score : prof[k].pct;
+    const col = v>=80 ? "var(--jade)" : (v>=55 ? "#B08420" : "var(--red)");
+    s += '<span style="font-weight:800;color:'+col+'">'+SKILL_META[k].icon+' '+SKILL_META[k].cn+' '+v+'</span>';
+  });
+  s += '</div>';
+  const f = ADAPT.placement.focus;
+  if(f) s += '<div class="ad-focus">🎯 先练 Focus: <b>'+SKILL_META[f].cn+' '+SKILL_META[f].en+'</b>'+
+    '<button class="go" id="adFocusGo">去练习 GO</button></div>';
+  return s;
+}
 const posLabel = i => "P"+UNITS[i].lvl+" · U"+UNITS[i].n+" "+UNITS[i].title;
 function renderAdaptBanner(){
   const el = document.getElementById("adaptBanner"); if(!el) return;
@@ -1088,8 +1116,7 @@ function renderAdaptBanner(){
     el.innerHTML = '<div class="ad-banner"><span class="big">🚩</span>'+
       '<div class="tx"><b>当前关卡 Current stage: '+posLabel(ADAPT.pos)+'</b>'+
       '<div>Practise this unit, then pass the 20-box writing test (80%+) to unlock the next one.</div>'+
-      (ADAPT.placement ? '<div style="font-size:12px;margin-top:4px">👂 '+posLabel(ADAPT.placement.listen)+
-        ' · 👀 '+posLabel(ADAPT.placement.read)+' · ✍️ '+posLabel(ADAPT.placement.write)+'</div>' : '')+
+      (ADAPT.placement && ADAPT.placement.profile ? profileStrip(ADAPT.placement.profile) : '')+
       '</div>'+
       '<button class="pbtn ghost hz" id="adGo">去练习<span class="py">GO TO UNIT</span></button>'+
       '<button class="pbtn primary hz" id="adTest">闯关测验<span class="py">WRITING TEST · 20 boxes</span></button>'+
@@ -1097,6 +1124,8 @@ function renderAdaptBanner(){
     document.getElementById("adGo").onclick = ()=>{ writeLvl = u.lvl; renderUnits(); saveSession(); };
     document.getElementById("adTest").onclick = ()=>startTest(true);
     document.getElementById("adRedo").onclick = ()=>{ if(window.confirm("Retake the placement quiz? Your practice progress is kept.")) startAssess(); };
+    const fx = document.getElementById("adFocusGo");
+    if(fx) fx.onclick = ()=>{ const t = document.getElementById(focusTab(ADAPT.placement.focus)); if(t) t.click(); };
   }
 }
 
@@ -1143,32 +1172,110 @@ function makeQuestion(idx){
 }
 function startAssess(){
   const START = Math.round(UNITS.length*0.33);
-  AS = {phase:"intro", pos:START, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0,
-        asked:new Set(), typeSeq:shuffle([0,1,2]),
-        listen:{pos:START, steps:[10,6,3], block:0, qInBlock:0, blockScore:0, correct:0, n:0},
-        writeProbe:{items:[], i:0, res:[]},
-        readPos:null, listenPos:null, writePos:null};
+  AS = {
+    si:0,
+    sections:["listen","read","tone","vocab","comp","write"],
+    asked:new Set(), typeSeq:shuffle([0,1,2]),
+    // adaptive staircases
+    listen:{pos:START, steps:[10,6,3], block:0, qInBlock:0, blockScore:0, correct:0, n:0},
+    pos:START, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0,
+    read:{correct:0, n:0},
+    // fixed-length skill probes
+    tone:{i:0, N:8, correct:0},
+    vocab:{i:0, N:8, correct:0},
+    comp:{qi:0, items:[], correct:0, n:0},
+    writeProbe:{items:[], i:0, res:[], pos:START, step:8, used:new Set(), N:8},
+    listenPos:null, readPos:null, writePos:null
+  };
   show("viewAssess");
   renderIntro();
 }
 document.getElementById("assessQuit").onclick = ()=>{ closeProbe(); AS = null; show("viewWriteList"); renderUnits(); };
 
+const SKILL_META = {
+  listen:{icon:"👂", cn:"听力", en:"Listening",       blurb:"Understanding spoken words"},
+  read:  {icon:"👀", cn:"认字", en:"Character reading", blurb:"Recognising characters and meanings"},
+  tone:  {icon:"🎵", cn:"拼音声调", en:"Pinyin & tones", blurb:"Reading pinyin and hearing tones"},
+  vocab: {icon:"📚", cn:"词语", en:"Vocabulary",       blurb:"Words and how they are used"},
+  comp:  {icon:"📖", cn:"阅读理解", en:"Comprehension", blurb:"Understanding what a passage says"},
+  write: {icon:"✍️", cn:"写字", en:"Writing",          blurb:"Writing characters from memory"}
+};
+
 function renderIntro(){
   document.getElementById("asProg").innerHTML = "";
+  let rows = "";
+  AS.sections.forEach(k=>{
+    const m = SKILL_META[k];
+    rows += '<div class="wt-wrongrow"><div class="wc">'+m.icon+'</div>'+
+      '<div class="wi"><b>'+m.cn+' '+m.en+'</b><br>'+m.blurb+'</div></div>';
+  });
   document.getElementById("asBody").innerHTML =
     '<div style="font-size:52px">🎯</div>'+
     '<div class="pf-h" style="font-size:26px">分级测试 Placement check</div>'+
-    '<div class="pf-sub" style="max-width:420px;margin:0 auto 14px">Three short parts — about 5 minutes.</div>'+
-    '<div style="text-align:left;max-width:340px;margin:0 auto 16px">'+
-      '<div class="wt-wrongrow"><div class="wc">👂</div><div class="wi"><b>听 Listening</b><br>Hear a word, choose the character</div></div>'+
-      '<div class="wt-wrongrow"><div class="wc">👀</div><div class="wi"><b>读 Reading</b><br>Meanings and sounds of characters</div></div>'+
-      '<div class="wt-wrongrow"><div class="wc">✍️</div><div class="wi"><b>写 Writing</b><br>Write a few characters from memory</div></div>'+
-    '</div>'+
-    '<button class="pbtn primary hz" id="asBegin">开始 →<span class="py">BEGIN — LISTENING FIRST</span></button>';
-  document.getElementById("asBegin").onclick = ()=>{ AS.phase = "listen"; nextListenQ(); };
+    '<div class="pf-sub" style="max-width:440px;margin:0 auto 14px">Six short parts, about 10–12 minutes. '+
+    'It finds your level and shows which skills to work on. You can stop and retake it any time.</div>'+
+    '<div style="text-align:left;max-width:360px;margin:0 auto 16px">'+rows+'</div>'+
+    '<button class="pbtn primary hz" id="asBegin">开始 →<span class="py">BEGIN</span></button>';
+  document.getElementById("asBegin").onclick = ()=>runSection(0);
 }
 
-/* ---------- PHASE 1: listening staircase (audio only, no character shown) ---------- */
+function sectionIntro(k, next){
+  const m = SKILL_META[k];
+  document.getElementById("asProg").innerHTML = "";
+  document.getElementById("asBody").innerHTML =
+    '<div style="font-size:50px">'+m.icon+'</div>'+
+    '<div class="pf-h" style="font-size:24px">'+(AS.si+1)+' / '+AS.sections.length+' · '+m.cn+' '+m.en+'</div>'+
+    '<div class="pf-sub">'+m.blurb+'</div>'+
+    '<button class="pbtn primary hz" id="asNextPhase">继续 →<span class="py">CONTINUE</span></button>';
+  document.getElementById("asNextPhase").onclick = next;
+}
+function runSection(i){
+  AS.si = i;
+  if(i >= AS.sections.length) return finishAssess();
+  const k = AS.sections[i];
+  const starters = {listen:nextListenQ, read:nextAssessQ, tone:nextToneQ, vocab:nextVocabQ, comp:startComp, write:startWriteProbe};
+  sectionIntro(k, starters[k]);
+}
+function dots(done, total){
+  const el = document.getElementById("asProg"); el.innerHTML = "";
+  for(let i=0;i<total;i++){
+    const d = document.createElement("i");
+    if(i<done) d.className="done"; else if(i===done) d.className="on";
+    el.appendChild(d);
+  }
+}
+
+/* generic multiple-choice renderer */
+function askMCQ(cfg){
+  document.getElementById("asBody").innerHTML =
+    '<div class="as-prompt">'+cfg.ask+'</div>'+
+    (cfg.promptHTML ? '<div class="as-big '+(cfg.promptCls||"")+'">'+cfg.promptHTML+'</div>' : '')+
+    (cfg.extraHTML || '')+
+    (cfg.say ? '<button class="speak" id="asSpeak">🔊 再听一次 listen again</button>' : '')+
+    '<div class="as-opts" id="asOpts"></div>';
+  if(cfg.say){
+    document.getElementById("asSpeak").onclick = ()=>speak(cfg.say, cfg.rate||0.8);
+    setTimeout(()=>{ if(AS && activeView==="viewAssess") speak(cfg.say, cfg.rate||0.8); }, 280);
+  }
+  const box = document.getElementById("asOpts");
+  if(cfg.wide) box.style.gridTemplateColumns = "1fr";
+  cfg.opts.forEach(o=>{
+    const b = document.createElement("button");
+    b.className = "as-opt"+(cfg.hz?" hzopt":"")+(cfg.wide?" wide":"");
+    b.textContent = o.t;
+    b.onclick = ()=>{
+      if(b.dataset.lock) return;
+      [...box.children].forEach(x=>x.dataset.lock=1);
+      if(o.ok) b.classList.add("right");
+      else{ b.classList.add("wrong"); [...box.children].forEach((x,i)=>{ if(cfg.opts[i].ok) x.classList.add("right"); }); }
+      if(cfg.sayAfter) speak(cfg.sayAfter);
+      setTimeout(()=>cfg.done(!!o.ok), 620);
+    };
+    box.appendChild(b);
+  });
+}
+
+/* ---------- 1. LISTENING (adaptive) ---------- */
 function makeListenQuestion(idx){
   let pool = levelPool(idx).filter(c=>!AS.asked.has(c));
   if(!pool.length){ pool = levelPool(idx); AS.asked = new Set(); }
@@ -1176,50 +1283,21 @@ function makeListenQuestion(idx){
   AS.asked.add(c);
   const meaning = Math.random() < 0.4;
   const ds = pickDistractors(idx, c, x=>meaning?x.en:x.py, 3);
-  if(meaning){
-    const opts = shuffle([c, ...ds].map(x=>({t:CHARS[x].en, ok:x===c})));
-    return {say:c, ask:"听一听 · 这个字是什么意思？ What does the word you hear mean?", opts, hz:false};
-  }
-  const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
-  return {say:c, ask:"听一听 · 你听到哪个字？ Which character did you hear?", opts, hz:true};
-}
-function listenProg(){
-  const el = document.getElementById("asProg"); el.innerHTML = "";
-  const L = AS.listen, total = (L.steps.length+1)*4;
-  for(let i=0;i<total;i++){
-    const d = document.createElement("i");
-    if(i < L.n) d.className = "done"; else if(i === L.n) d.className = "on";
-    el.appendChild(d);
-  }
+  if(meaning) return {say:c, ask:"听一听 · 这个字是什么意思？ What does the word mean?",
+    opts:shuffle([c,...ds].map(x=>({t:CHARS[x].en, ok:x===c}))), hz:false};
+  return {say:c, ask:"听一听 · 你听到哪个字？ Which character did you hear?",
+    opts:shuffle([c,...ds].map(x=>({t:x, ok:x===c}))), hz:true};
 }
 function nextListenQ(){
-  listenProg();
   const L = AS.listen;
+  dots(L.n, (L.steps.length+1)*4);
   const q = makeListenQuestion(L.pos);
-  document.getElementById("asBody").innerHTML =
-    '<div class="as-prompt">'+q.ask+'</div>'+
-    '<div class="as-big" style="font-size:64px">🔊</div>'+
-    '<button class="speak" id="asSpeak">🔊 再听一次 listen again</button>'+
-    '<div class="as-opts" id="asOpts"></div>';
-  document.getElementById("asSpeak").onclick = ()=>speak(q.say, 0.7);
-  setTimeout(()=>{ if(AS && AS.phase==="listen" && activeView==="viewAssess") speak(q.say, 0.7); }, 300);
-  const box = document.getElementById("asOpts");
-  q.opts.forEach(o=>{
-    const b = document.createElement("button");
-    b.className = "as-opt"+(q.hz?" hzopt":"");
-    b.textContent = o.t;
-    b.onclick = ()=>{
-      if(b.dataset.lock) return;
-      [...box.children].forEach(x=>x.dataset.lock=1);
-      if(o.ok){ b.classList.add("right"); L.blockScore++; L.correct++; }
-      else{ b.classList.add("wrong"); [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); }); }
+  askMCQ({ask:q.ask, promptHTML:"🔊", promptCls:"", say:q.say, rate:0.7, opts:q.opts, hz:q.hz,
+    done: ok=>{
+      if(ok){ L.blockScore++; L.correct++; }
       L.n++; L.qInBlock++;
-      setTimeout(()=>{
-        if(L.qInBlock>=4) endListenBlock(); else nextListenQ();
-      }, 600);
-    };
-    box.appendChild(b);
-  });
+      if(L.qInBlock>=4) endListenBlock(); else nextListenQ();
+    }});
 }
 function endListenBlock(){
   const L = AS.listen, step = L.steps[L.block];
@@ -1227,66 +1305,24 @@ function endListenBlock(){
     if(L.blockScore>=3) L.pos = Math.min(UNITS.length-1, L.pos+step);
     else if(L.blockScore<=1) L.pos = Math.max(0, L.pos-step);
   }
-  L.block++; L.qInBlock = 0; L.blockScore = 0;
+  L.block++; L.qInBlock=0; L.blockScore=0;
   if(L.block >= L.steps.length+1){
-    AS.listenPos = L.pos;
-    AS.phase = "read";
-    AS.pos = L.pos;                       // start reading near the listening result
-    AS.asked = new Set();
-    phaseCard("👀","读 Reading", "Now look at the characters.", nextAssessQ);
+    AS.listenPos = L.pos; AS.pos = L.pos; AS.asked = new Set();
+    runSection(AS.si+1);
   }else nextListenQ();
 }
 
-/* ---------- phase transition card ---------- */
-function phaseCard(icon, title, sub, next){
-  document.getElementById("asProg").innerHTML = "";
-  document.getElementById("asBody").innerHTML =
-    '<div style="font-size:52px">'+icon+'</div>'+
-    '<div class="pf-h" style="font-size:26px">'+title+'</div>'+
-    '<div class="pf-sub">'+sub+'</div>'+
-    '<button class="pbtn primary hz" id="asNextPhase">继续 →<span class="py">CONTINUE</span></button>';
-  document.getElementById("asNextPhase").onclick = next;
-}
-
-/* ---------- PHASE 2: reading staircase ---------- */
-function assessProg(){
-  const el = document.getElementById("asProg"); el.innerHTML = "";
-  const totalBlocks = AS.steps.length + 1;
-  for(let b=0;b<totalBlocks;b++) for(let q=0;q<5;q++){
-    const i = document.createElement("i");
-    const gi = b*5+q;
-    if(gi < AS.total) i.className = "done"; else if(gi === AS.total) i.className = "on";
-    el.appendChild(i);
-  }
-}
+/* ---------- 2. CHARACTER READING (adaptive) ---------- */
 function nextAssessQ(){
-  assessProg();
+  dots(AS.total, (AS.steps.length+1)*5);
   const q = makeQuestion(AS.pos);
-  const body = document.getElementById("asBody");
-  body.innerHTML = '<div class="as-prompt">'+q.ask+'</div>'+
-    '<div class="as-big '+q.promptCls+'">'+q.prompt+'</div>'+
-    (q.say ? '<button class="speak" id="asSpeak">🔊 再听一次 listen again</button>' : '')+
-    '<div class="as-opts" id="asOpts"></div>';
-  if(q.say){
-    document.getElementById("asSpeak").onclick = ()=>speak(q.say);
-    setTimeout(()=>{ if(AS && AS.phase==="read" && activeView==="viewAssess") speak(q.say); }, 250);
-  }
-  const box = document.getElementById("asOpts");
-  q.opts.forEach(o=>{
-    const b = document.createElement("button");
-    b.className = "as-opt"+(q.hz?" hzopt":"");
-    b.textContent = o.t;
-    b.onclick = ()=>{
-      if(b.dataset.lock) return;
-      [...box.children].forEach(x=>x.dataset.lock=1);
-      if(o.ok){ b.classList.add("right"); AS.blockScore++; }
-      else{ b.classList.add("wrong"); [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); }); }
-      if(!q.say) speak(q.answerChar||"");
-      AS.total++; AS.qInBlock++;
-      setTimeout(()=>{ if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ(); }, 650);
-    };
-    box.appendChild(b);
-  });
+  askMCQ({ask:q.ask, promptHTML:q.prompt, promptCls:q.promptCls, say:q.say, opts:q.opts, hz:q.hz,
+    sayAfter: q.say ? null : (q.answerChar||null),
+    done: ok=>{
+      if(ok){ AS.blockScore++; AS.read.correct++; }
+      AS.read.n++; AS.total++; AS.qInBlock++;
+      if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ();
+    }});
 }
 function endAssessBlock(){
   const step = AS.steps[AS.block];
@@ -1294,19 +1330,124 @@ function endAssessBlock(){
     if(AS.blockScore>=4) AS.pos = Math.min(UNITS.length-1, AS.pos+step);
     else if(AS.blockScore<=2) AS.pos = Math.max(0, AS.pos-step);
   }
-  AS.block++; AS.qInBlock = 0; AS.blockScore = 0;
+  AS.block++; AS.qInBlock=0; AS.blockScore=0;
   if(AS.block >= AS.steps.length+1){
     AS.readPos = AS.pos;
-    AS.phase = "write";
-    buildWriteProbe();
-    phaseCard("✍️","写 Writing","Write these from memory — no tracing lines. Do your best!", nextProbe);
+    AS.writeProbe.pos = AS.pos;
+    runSection(AS.si+1);
   }else nextAssessQ();
 }
 
-/* ---------- PHASE 3: writing probe (6 characters, spread around the reading level) ---------- */
-function buildWriteProbe(){
-  AS.writeProbe = {items:[], i:0, res:[], pos:AS.readPos, step:8, used:new Set(), N:6};
+/* ---------- 3. PINYIN & TONES ---------- */
+const TONE_MARK_SETS = {a:"āáǎà", o:"ōóǒò", e:"ēéěè", i:"īíǐì", u:"ūúǔù", "ü":"ǖǘǚǜ"};
+function stripTone(py){
+  let out = "";
+  for(const ch of py){
+    let hit = null;
+    for(const base in TONE_MARK_SETS){
+      const k = TONE_MARK_SETS[base].indexOf(ch);
+      if(k>=0){ hit = base; break; }
+    }
+    out += hit || ch;
+  }
+  return out;
+}
+function applyTone(base, t){
+  let idx = -1;
+  for(const v of ["a","o","e"]){ const k = base.indexOf(v); if(k>=0){ idx = k; break; } }
+  if(idx<0) for(let i=base.length-1;i>=0;i--){ if("iuü".indexOf(base[i])>=0){ idx = i; break; } }
+  if(idx<0) return base;
+  return base.slice(0,idx) + TONE_MARK_SETS[base[idx]][t-1] + base.slice(idx+1);
+}
+function nextToneQ(){
+  const T = AS.tone;
+  dots(T.i, T.N);
+  const pool = levelPool(Math.max(0, AS.readPos-1)).filter(c=>CHARS[c] && CHARS[c].tone>0);
+  const c = pool.length ? pool[Math.floor(Math.random()*pool.length)] : "水";
+  const info = CHARS[c], base = stripTone(info.py);
+  const variants = [1,2,3,4].map(t=>applyTone(base,t));
+  const opts = shuffle(variants.map(v=>({t:v, ok:v===info.py})));
+  askMCQ({
+    ask:"听一听 · 这个字的拼音是哪一个？ Which pinyin is correct?",
+    promptHTML:c, say:c, opts, hz:false,
+    done: ok=>{
+      if(ok) T.correct++;
+      T.i++;
+      if(T.i>=T.N) runSection(AS.si+1); else nextToneQ();
+    }});
+}
+
+/* ---------- 4. VOCABULARY ---------- */
+function wordPool(idx){
+  const out = [];
+  for(let d=Math.max(0,idx-3); d<=Math.min(UNITS.length-1, idx+1); d++)
+    UNITS[d].chars.forEach(c=>{ (CHARS[c].words||[]).forEach(w=>out.push({w, c})); });
+  return out;
+}
+function nextVocabQ(){
+  const V = AS.vocab;
+  dots(V.i, V.N);
+  const pool = wordPool(AS.readPos);
+  if(!pool.length){ runSection(AS.si+1); return; }
+  const pick = pool[Math.floor(Math.random()*pool.length)];
+  const cloze = Math.random() < 0.5 && CHARS[pick.c].sents && CHARS[pick.c].sents.length;
+  if(cloze){
+    const c = pick.c;
+    const sent = CHARS[c].sents[0];
+    const blanked = sent.split(c).join("＿");
+    const ds = pickDistractors(AS.readPos, c, x=>x.en, 3);
+    askMCQ({
+      ask:"哪个字可以填进空格？ Which character fits the blank?",
+      promptHTML:blanked, promptCls:"small",
+      opts: shuffle([c,...ds].map(x=>({t:x, ok:x===c}))), hz:true,
+      done: ok=>{ if(ok) V.correct++; V.i++; if(V.i>=V.N) runSection(AS.si+1); else nextVocabQ(); }});
+  }else{
+    const others = shuffle(pool.filter(p=>p.w.en!==pick.w.en)).slice(0,3);
+    askMCQ({
+      ask:"这个词是什么意思？ What does this word mean?",
+      promptHTML:pick.w.w, promptCls:"", say:pick.w.w,
+      opts: shuffle([{t:pick.w.en, ok:true}, ...others.map(o=>({t:o.w.en, ok:false}))]), hz:false, wide:true,
+      done: ok=>{ if(ok) V.correct++; V.i++; if(V.i>=V.N) runSection(AS.si+1); else nextVocabQ(); }});
+  }
+}
+
+/* ---------- 5. READING COMPREHENSION ---------- */
+function unitIndexOf(lvl, n){
+  for(let i=0;i<UNITS.length;i++) if(UNITS[i].lvl===lvl && UNITS[i].n===n) return i;
+  return 0;
+}
+function startComp(){
+  const quizzed = PASSAGES.filter(p=>p.qs && p.qs.length);
+  const atOrBelow = quizzed.filter(p=>unitIndexOf(p.lvl,p.after) <= AS.readPos+2);
+  const chosen = (atOrBelow.length ? atOrBelow : quizzed).slice(-2);
+  AS.comp.items = [];
+  chosen.forEach(p=>p.qs.slice(0,2).forEach(q=>AS.comp.items.push({p,q})));
+  AS.comp.qi = 0;
+  if(!AS.comp.items.length) return runSection(AS.si+1);
+  nextCompQ();
+}
+function nextCompQ(){
+  const C = AS.comp;
+  if(C.qi >= C.items.length){ runSection(AS.si+1); return; }
+  dots(C.qi, C.items.length);
+  const {p, q} = C.items[C.qi];
+  const passHTML = '<div style="text-align:left;font-family:var(--hanzi);font-size:21px;line-height:1.9;'+
+    'background:var(--paper);border:1.5px solid #EAE3D6;border-radius:12px;padding:12px 14px;margin-bottom:10px">'+
+    '<b style="font-size:19px">'+p.title+'</b><br>'+p.text.split("\n").join("<br>")+'</div>';
+  askMCQ({
+    ask:"读一读，回答问题 Read, then answer",
+    extraHTML: passHTML + '<div class="qz-q" style="margin:6px 0 2px">'+q.q+'</div>',
+    opts: q.opts.map((o,i)=>({t:o, ok:i===q.a})), hz:false, wide:true,
+    done: ok=>{ if(ok) C.correct++; C.n++; C.qi++; nextCompQ(); }});
+}
+
+/* ---------- 6. WRITING (adaptive probe) ---------- */
+function startWriteProbe(){
+  AS.writeProbe.pos = AS.readPos;
+  AS.writeProbe.items = []; AS.writeProbe.i = 0; AS.writeProbe.res = [];
+  AS.writeProbe.step = 8; AS.writeProbe.used = new Set();
   nextProbeItem();
+  nextProbe();
 }
 function nextProbeItem(){
   const P = AS.writeProbe;
@@ -1330,34 +1471,24 @@ function closeProbe(){
   try{ if(probeWriter) probeWriter.cancelQuiz(); }catch(e){}
   probeWriter = null;
 }
-function probeProg(){
-  const el = document.getElementById("asProg"); el.innerHTML = "";
-  const P = AS.writeProbe;
-  for(let i=0;i<P.N;i++){
-    const d = document.createElement("i");
-    if(i < P.i) d.className = "done"; else if(i === P.i) d.className = "on";
-    el.appendChild(d);
-  }
-}
 function nextProbe(){
   const P = AS.writeProbe;
-  if(P.i >= P.N || P.i >= P.items.length) return finishAssess();
-  probeProg();
-  const {c} = P.items[P.i], info = CHARS[c];
+  if(P.i >= P.N || P.i >= P.items.length){ closeProbe(); return runSection(AS.si+1); }
+  dots(P.i, P.N);
+  const it = P.items[P.i], c = it.c, info = CHARS[c];
   document.getElementById("asBody").innerHTML =
-    '<div class="as-prompt">写一写 · Write this character</div>'+
+    '<div class="as-prompt">写一写 · Write this character from memory</div>'+
     '<div class="wt-prompt"><span class="p1"><span class="t'+info.tone+'">'+info.py+'</span></span>'+
     '<span class="p2">'+info.en+'</span>'+
     '<button class="speak" id="asSpeak" style="margin-top:0">🔊</button>'+
-    '<span class="p2">'+(P.i+1)+' / '+P.items.length+'</span></div>'+
-    '<div style="width:min(100%,340px);margin:0 auto">'+
+    '<span class="p2">'+(P.i+1)+' / '+P.N+'</span></div>'+
+    '<div style="width:min(100%,330px);margin:0 auto">'+
       '<div class="tzg" id="probeSq" style="width:100%;aspect-ratio:1;position:relative">'+
       '<div id="probeQuiz" style="position:absolute;inset:0"></div></div></div>'+
-    '<div class="padbtns"><button class="pbtn ghost hz" id="probeSkip">不会写<span class="py">DON\'T KNOW</span></button></div>';
+    '<div class="padbtns"><button class="pbtn ghost hz" id="probeSkip">不会写<span class="py">NOT SURE</span></button></div>';
   document.getElementById("asSpeak").onclick = ()=>speak(c);
   document.getElementById("probeSkip").onclick = ()=>{
-    const it = P.items[P.i];
-    P.res.push({c:it.c, idx:it.idx, ok:false});
+    P.res.push({c, idx:it.idx, ok:false});
     advanceProbe(false, it.idx);
     P.i++; closeProbe(); nextProbe();
   };
@@ -1373,45 +1504,84 @@ function nextProbe(){
   });
   probeWriter.quiz({ onComplete: summary => {
     const n = STROKES[c].strokes.length;
-    const it = P.items[P.i];
     const ok = summary.totalMistakes <= Math.max(2, Math.floor(n*0.34));
-    P.res.push({c:it.c, idx:it.idx, ok});
+    P.res.push({c, idx:it.idx, ok});
     advanceProbe(ok, it.idx);
     P.i++; setTimeout(()=>{ closeProbe(); nextProbe(); }, 300);
   }});
 }
 
-/* ---------- results ---------- */
+/* ---------- RESULTS: skill profile ---------- */
 function finishAssess(){
   closeProbe();
-  const P = AS.writeProbe;
-  // highest unit index the child wrote correctly (with one allowed miss below it)
+  const P = AS.writeProbe, L = AS.listen;
   const okIdx = P.res.filter(r=>r.ok).map(r=>r.idx).sort((a,b)=>a-b);
   AS.writePos = okIdx.length ? okIdx[okIdx.length-1] : 0;
-  const L = AS.listen;
-  const listenPct = L.n ? Math.round(L.correct/L.n*100) : 0;
-  // practice starts at the weaker of reading/writing
+  const pct = (a,b)=> b ? Math.round(a/b*100) : 0;
+  // Adaptive sections (listening / reading / writing) settle near the frontier, so their raw
+  // accuracy is ~50% by design and is NOT comparable to the fixed probes. Score those by the
+  // level reached instead, measured against the child's own strongest level.
+  const prof = {
+    listen:{pct:pct(L.correct,L.n), lvl:AS.listenPos, kind:"level"},
+    read:  {pct:pct(AS.read.correct,AS.read.n), lvl:AS.readPos, kind:"level"},
+    tone:  {pct:pct(AS.tone.correct,AS.tone.N), lvl:null, kind:"pct"},
+    vocab: {pct:pct(AS.vocab.correct,AS.vocab.N), lvl:null, kind:"pct"},
+    comp:  {pct:pct(AS.comp.correct,AS.comp.n||AS.comp.items.length), lvl:null, kind:"pct"},
+    write: {pct:pct(P.res.filter(r=>r.ok).length, P.res.length), lvl:AS.writePos, kind:"level"}
+  };
+  const topLvl = Math.max(AS.listenPos, AS.readPos, AS.writePos);
+  Object.keys(prof).forEach(k=>{
+    const s = prof[k];
+    s.score = (s.kind==="level")
+      ? Math.max(0, Math.min(100, 100 - (topLvl - s.lvl)*7))   // units behind your best skill
+      : s.pct;                                                  // probed at your own level
+  });
   const startPos = Math.max(0, Math.min(AS.readPos, AS.writePos));
+  const ranked = Object.keys(prof).sort((a,b)=>prof[a].score-prof[b].score);
+  const focus = ranked[0], best = ranked[ranked.length-1];
   ADAPT.pos = startPos;
-  ADAPT.placement = {ts:Date.now(), read:AS.readPos, write:AS.writePos, listen:AS.listenPos, listenPct};
+  ADAPT.placement = {ts:Date.now(), read:AS.readPos, write:AS.writePos, listen:AS.listenPos,
+                     listenPct:prof.listen.pct, profile:prof, focus, best};
   saveAdapt(); statBump("test",0);
   document.getElementById("asProg").innerHTML = "";
-  const row = (icon,label,val,note)=>
-    '<div class="wt-wrongrow"><div class="wc">'+icon+'</div><div class="wi"><b>'+label+'</b><br>'+val+
-    (note?'<br><span style="font-size:12px">'+note+'</span>':'')+'</div></div>';
+  let bars = "";
+  Object.keys(prof).forEach(k=>{
+    const m = SKILL_META[k], s = prof[k], v = s.score;
+    const col = v>=80 ? "var(--jade)" : (v>=55 ? "var(--gold)" : "var(--red)");
+    const label = (s.kind==="level") ? posLabel(s.lvl) : s.pct+"% correct";
+    bars += '<div class="sk-row"><div class="sk-lab">'+m.icon+' '+m.cn+'<b>'+m.en+'</b></div>'+
+      '<div class="sk-bar"><i style="width:'+Math.max(3,v)+'%;background:'+col+'"></i>'+
+      '<span>'+label+'</span></div></div>';
+  });
   document.getElementById("asBody").innerHTML =
-    '<div style="font-size:52px">🎯</div>'+
-    '<div class="pf-h" style="font-size:26px">你的成绩 Your results</div>'+
-    '<div style="text-align:left;max-width:400px;margin:14px auto">'+
-      row("👂","听 Listening", posLabel(AS.listenPos), listenPct+"% correct") +
-      row("👀","读 Reading", posLabel(AS.readPos), "recognising characters") +
-      row("✍️","写 Writing", posLabel(AS.writePos), P.res.filter(r=>r.ok).length+" of "+P.res.length+" written correctly") +
-    '</div>'+
-    '<div class="pf-sub">Practice starts at the level you can <b>write</b>, so reading and writing catch up together.</div>'+
-    '<div class="wt-score pass" style="font-size:26px">'+posLabel(startPos)+'</div>'+
+    '<div style="font-size:50px">🎯</div>'+
+    '<div class="pf-h" style="font-size:25px">学习报告 Your learning profile</div>'+
+    '<div class="pf-sub" style="font-size:12px">Bars compare your six skills to each other, not to a class average.</div>'+
+    '<div class="sk-wrap">'+bars+'</div>'+
+    '<div class="wt-wrongrow" style="text-align:left"><div class="wc">💪</div><div class="wi">'+
+      '<b>最强 Strongest: '+SKILL_META[best].cn+' '+SKILL_META[best].en+'</b><br>'+
+      (prof[best].kind==="level" ? posLabel(prof[best].lvl) : prof[best].pct+"% correct")+'</div></div>'+
+    '<div class="wt-wrongrow" style="text-align:left"><div class="wc">🎯</div><div class="wi">'+
+      '<b>先练这个 Focus first: '+SKILL_META[focus].cn+' '+SKILL_META[focus].en+'</b><br>'+
+      focusAdvice(focus)+'</div></div>'+
+    '<div class="pf-sub" style="margin-top:12px">Practice starts where you can <b>write</b>, so reading and writing grow together.</div>'+
+    '<div class="wt-score pass" style="font-size:24px">'+posLabel(startPos)+'</div>'+
     '<button class="pbtn primary hz" id="asGo">开始学习 →<span class="py">START LEARNING</span></button>';
   document.getElementById("asGo").onclick = ()=>{ writeLvl = UNITS[ADAPT.pos].lvl; show("viewWriteList"); renderUnits(); saveSession(); };
   AS = null;
+}
+function focusAdvice(k){
+  return ({
+    listen:"Use 听写 Dictation daily — it trains the ear fastest.",
+    read:  "Read the stories in 阅读 and tap characters you are unsure of.",
+    tone:  "Play the tone game in 拼音 — a few minutes each day.",
+    vocab: "On each character page, say the 词语 aloud and use them in a sentence.",
+    comp:  "Read one story a day and answer the 考一考 questions.",
+    write: "Do the 20-box writing test often, and practise the red characters."
+  })[k] || "";
+}
+function focusTab(k){
+  return ({listen:"tabDict", read:"tabRead", tone:"tabPy", vocab:"tabWrite", comp:"tabRead", write:"tabWrite"})[k] || "tabWrite";
 }
 
 /* ---- 20-box writing test (unassisted, graded at the end) ---- */
