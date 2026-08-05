@@ -331,7 +331,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 <header>
   <div class="brand">
     <div class="seal">文</div>
-    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese</small></h1>
+    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v7</small></h1>
   </div>
   <nav>
     <button class="tab hz" id="tabPy">拼音<span class="py">PINYIN</span></button>
@@ -1834,7 +1834,25 @@ document.getElementById("syncOff").onclick = async ()=>{
 <script>
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      setInterval(() => reg.update().catch(()=>{}), 60*60*1000);
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) {
+            // a newer build is ready; take it on the next launch
+            try { sessionStorage.setItem("hw-pending-update", "1"); } catch(e) {}
+          }
+        });
+      });
+    }).catch(()=>{});
+    let hwReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (hwReloaded) return;
+      hwReloaded = true;
+      location.reload();
+    });
   });
 }
 if (navigator.storage && navigator.storage.persist) {
