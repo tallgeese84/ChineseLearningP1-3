@@ -1,4 +1,4 @@
-const VERSION = "v13";
+const VERSION = "v14";
 const CACHE = "huawen-" + VERSION;
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
