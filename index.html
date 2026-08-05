@@ -308,6 +308,37 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 .wt-wrongrow .wi{flex:1;font-size:14px;font-weight:700;color:var(--ink-soft)}
 .wt-wrongrow .wi b{color:var(--ink);font-size:16px}
 
+/* worksheet grid */
+.wt-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.wt-title{font-size:20px;font-weight:900}
+.wt-sub{font-size:13px;color:var(--ink-soft);font-weight:700;margin-top:2px}
+.wt-left{margin-left:auto;font-size:14px;font-weight:800;color:var(--ink-soft);white-space:nowrap}
+.wt-left b{font-size:22px;color:var(--red)}
+.wt-sheet{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media(max-width:620px){.wt-sheet{grid-template-columns:repeat(4,1fr)}}
+.wt-box{position:relative;aspect-ratio:1;background:#fff;border:2px solid var(--red-line);border-radius:6px;overflow:hidden;padding:0}
+.wt-box::before,.wt-box::after{content:"";position:absolute;pointer-events:none;z-index:1}
+.wt-box::before{left:50%;top:0;bottom:0;border-left:1px dashed var(--red-soft)}
+.wt-box::after{top:50%;left:0;right:0;border-top:1px dashed var(--red-soft)}
+.wt-box .n{position:absolute;top:2px;left:4px;font-size:10px;font-weight:900;color:#C9C0B0;z-index:3}
+.wt-box .cue{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:11px;font-weight:800;z-index:3;
+  text-shadow:0 1px 0 #fff,0 -1px 0 #fff,1px 0 0 #fff,-1px 0 0 #fff}
+.wt-box .ink{position:absolute;inset:0;z-index:2}
+.wt-box .ink svg,.wt-box .ink canvas{width:100%;height:100%;display:block}
+.wt-box.filled{background:#FCFAF5}
+.wt-box.active{box-shadow:0 0 0 3px var(--gold);border-color:var(--gold)}
+.wt-box.ok{background:var(--jade-soft);border-color:var(--jade)}
+.wt-box.bad{background:var(--red-soft);border-color:var(--red)}
+.wt-box .mark{position:absolute;top:2px;right:4px;font-size:13px;z-index:3}
+/* focused writing overlay */
+#wtFocus{position:fixed;inset:0;z-index:60;background:rgba(43,39,35,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+#wtFocus .fw{background:#fff;border-radius:20px;padding:16px;width:min(94vw,430px);text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+#wtFocus .fw-prompt{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+#wtFocus .fw-prompt .p1{font-size:26px;font-weight:900}
+#wtFocus .fw-prompt .p2{font-size:15px;color:var(--ink-soft);font-weight:700}
+#wtFocus .fw-sq{width:100%;aspect-ratio:1;position:relative}
+#wtFocus .fw-btns{display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+
 /* bottom sheet */
 #sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;transform:translateY(110%);transition:transform .22s ease;padding:0 12px 12px}
 #sheet.open{transform:translateY(0)}
@@ -331,7 +362,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 <header>
   <div class="brand">
     <div class="seal">文</div>
-    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v7</small></h1>
+    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v9</small></h1>
   </div>
   <nav>
     <button class="tab hz" id="tabPy">拼音<span class="py">PINYIN</span></button>
@@ -438,15 +469,17 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
     <button class="backbtn" id="testQuit">← 退出 quit test</button>
     <div class="panel" style="max-width:640px;margin:0 auto">
       <div id="wtLive">
-        <div class="wt-strip" id="wtStrip"></div>
-        <div class="wt-prompt" id="wtPrompt"></div>
-        <div id="padWrapT" style="width:min(100%,400px);margin:0 auto;position:relative">
-          <div class="tzg" id="wtSquare" style="width:100%;aspect-ratio:1;position:relative">
-            <div id="wtQuiz" style="position:absolute;inset:0"></div>
+        <div class="wt-head">
+          <div>
+            <div class="wt-title hz">闯关测验 · 20 格</div>
+            <div class="wt-sub">Write each character in its box. Tap a box to write in it; tap 🔊 to hear the word.</div>
           </div>
+          <div class="wt-left"><b id="wtLeft">0</b> / 20 写好了</div>
         </div>
+        <div class="wt-sheet" id="wtSheet"></div>
         <div class="padbtns">
-          <button class="pbtn ghost hz" id="wtSkip">不会写<span class="py">SKIP — MARK WRONG</span></button>
+          <button class="pbtn ghost hz" id="wtUndo">清除这格<span class="py">CLEAR THIS BOX</span></button>
+          <button class="pbtn primary hz" id="wtSubmit">交卷 ✓<span class="py">SUBMIT — CHECK MY WORK</span></button>
         </div>
       </div>
       <div id="wtResults" class="hidden"></div>
@@ -1063,26 +1096,41 @@ function pickDistractors(idx, target, keyFn, n){
     UNITS[d].chars.forEach(c=>{ if(c!==target && keyFn(CHARS[c])!==keyFn(CHARS[target])) pool.push(c); });
   return shuffle([...new Set(pool)]).slice(0,n);
 }
+function levelPool(idx){
+  // characters at this difficulty: the unit itself plus its immediate neighbours,
+  // so a 5-question block never has to repeat even in a small unit
+  const out = [];
+  for(let d=Math.max(0,idx-1); d<=Math.min(UNITS.length-1, idx+1); d++) out.push(...UNITS[d].chars);
+  return [...new Set(out)];
+}
 function makeQuestion(idx){
-  const c = UNITS[idx].chars[Math.floor(Math.random()*UNITS[idx].chars.length)];
+  let pool = levelPool(idx).filter(c=>!AS.asked.has(c));
+  if(!pool.length){                       // exhausted: allow the least-recently asked
+    pool = levelPool(idx);
+    AS.asked = new Set();
+  }
+  const c = pool[Math.floor(Math.random()*pool.length)];
+  AS.asked.add(c);
   const info = CHARS[c];
-  const type = Math.floor(Math.random()*3);
+  // rotate question types so the same format doesn't repeat back-to-back
+  const type = AS.typeSeq[AS.total % AS.typeSeq.length];
   if(type===0){
     const ds = pickDistractors(idx, c, x=>x.en, 3);
     const opts = shuffle([c, ...ds].map(x=>({t:CHARS[x].en, ok:x===c})));
-    return {prompt:c, promptCls:"", ask:"这个字是什么意思？ What does it mean?", opts, hz:false};
+    return {prompt:c, promptCls:"", ask:"这个字是什么意思？ What does it mean?", opts, hz:false, say:c};
   }
   if(type===1){
     const ds = pickDistractors(idx, c, x=>x.en, 3);
     const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
-    return {prompt:info.en, promptCls:"small", ask:"哪个字是这个意思？ Which character means this?", opts, hz:true};
+    return {prompt:info.en, promptCls:"small", ask:"哪个字是这个意思？ Which character means this?", opts, hz:true, say:null, answerChar:c};
   }
   const ds = pickDistractors(idx, c, x=>x.py, 3);
   const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
-  return {prompt:'<span class="t'+info.tone+'">'+info.py+'</span>', promptCls:"small", ask:"哪个字读这个音？ Which character has this sound?", opts, hz:true};
+  return {prompt:'<span class="t'+info.tone+'">'+info.py+'</span>', promptCls:"small", ask:"哪个字读这个音？ Which character has this sound?", opts, hz:true, say:c};
 }
 function startAssess(){
-  AS = {pos:10, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0, done:false};
+  AS = {pos:10, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0, done:false,
+        asked:new Set(), typeSeq:shuffle([0,1,2])};
   show("viewAssess");
   nextAssessQ();
 }
@@ -1102,7 +1150,13 @@ function nextAssessQ(){
   const q = makeQuestion(AS.pos);
   const body = document.getElementById("asBody");
   body.innerHTML = '<div class="as-prompt">'+q.ask+'</div>'+
-    '<div class="as-big '+q.promptCls+'">'+q.prompt+'</div><div class="as-opts" id="asOpts"></div>';
+    '<div class="as-big '+q.promptCls+'">'+q.prompt+'</div>'+
+    (q.say ? '<button class="speak" id="asSpeak">🔊 再听一次 listen again</button>' : '')+
+    '<div class="as-opts" id="asOpts"></div>';
+  if(q.say){
+    document.getElementById("asSpeak").onclick = ()=>speak(q.say);
+    setTimeout(()=>speak(q.say), 250);
+  }
   const box = document.getElementById("asOpts");
   q.opts.forEach(o=>{
     const b = document.createElement("button");
@@ -1116,6 +1170,7 @@ function nextAssessQ(){
         b.classList.add("wrong");
         [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); });
       }
+      if(!q.say) speak(q.answerChar||"");   // "which character means X" — hear the right answer
       AS.total++; AS.qInBlock++;
       setTimeout(()=>{
         if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ();
@@ -1146,7 +1201,7 @@ function finishAssess(){
 }
 
 /* ---- 20-box writing test (unassisted, graded at the end) ---- */
-let WT = null, wtWriter = null;
+let WT = null;
 function testPool(){
   const maxIdx = (ADAPT.pos!==null) ? ADAPT.pos : UNITS.map((u,i)=>u.lvl===writeLvl?i:-1).filter(i=>i>=0).pop();
   const pool = [];
@@ -1170,68 +1225,107 @@ function pickTestChars(){
   return shuffle(chosen).map(x=>x.c);
 }
 function startTest(gated){
-  WT = {chars: pickTestChars(), i:0, res:[], gated: !!gated && ADAPT.pos!==null};
+  WT = {chars: pickTestChars(), res:[], ink:{}, mistakes:{}, cur:null, gated: !!gated && ADAPT.pos!==null, graded:false};
   document.getElementById("wtLive").classList.remove("hidden");
   document.getElementById("wtResults").classList.add("hidden");
   show("viewTest");
-  renderStrip();
-  nextTestChar();
+  renderSheet();
 }
 document.getElementById("testQuit").onclick = ()=>{
-  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
-  wtWriter = null; WT = null; show("viewWriteList"); renderUnits();
+  closeFocus(); WT = null; show("viewWriteList"); renderUnits();
 };
-function renderStrip(reveal){
-  const s = document.getElementById("wtStrip"); s.innerHTML = "";
+function renderSheet(){
+  const sheet = document.getElementById("wtSheet"); sheet.innerHTML = "";
   WT.chars.forEach((c,i)=>{
-    const d = document.createElement("div");
-    let cls = "wt-cell tzg";
-    if(reveal){ cls += WT.res[i] && WT.res[i].ok ? " ok" : " bad"; }
-    else{
-      if(i<WT.i) cls += " done";
-      if(i===WT.i) cls += " cur";
-    }
-    d.className = cls;
-    d.textContent = reveal ? c : (i+1);
-    s.appendChild(d);
+    const info = CHARS[c];
+    const b = document.createElement("button");
+    b.className = "wt-box tzg" + (WT.ink[i] ? " filled":"") + (WT.cur===i ? " active":"");
+    b.innerHTML = '<span class="n">'+(i+1)+'</span>'+
+      (WT.ink[i] ? '<span class="ink">'+WT.ink[i]+'</span>' : '')+
+      '<span class="cue t'+info.tone+'">'+info.py+'</span>';
+    b.onclick = ()=>openFocus(i);
+    sheet.appendChild(b);
   });
+  document.getElementById("wtLeft").textContent = Object.keys(WT.ink).length;
 }
-function nextTestChar(){
-  if(WT.i >= WT.chars.length) return finishTest();
-  renderStrip();
-  const c = WT.chars[WT.i], info = CHARS[c];
-  const pr = document.getElementById("wtPrompt");
-  pr.innerHTML = '<span class="p1"><span class="t'+info.tone+'">'+info.py+'</span></span>'+
+
+/* ---- focused single-box writing (opens over the worksheet) ---- */
+let focusWriter = null, focusIdx = null;
+function openFocus(i){
+  focusIdx = i; WT.cur = i;
+  const c = WT.chars[i], info = CHARS[c];
+  const ov = document.createElement("div"); ov.id = "wtFocus";
+  ov.innerHTML = '<div class="fw">'+
+    '<div class="fw-prompt"><span class="p1"><span class="t'+info.tone+'">'+info.py+'</span></span>'+
     '<span class="p2">'+info.en+'</span>'+
-    '<button class="speak" id="wtSpeak" style="margin-top:0">🔊</button>'+
-    '<span class="p2">'+(WT.i+1)+' / '+WT.chars.length+'</span>';
-  document.getElementById("wtSpeak").onclick = ()=>speak(c);
-  const box = document.getElementById("wtQuiz"); box.innerHTML = "";
-  const size = document.getElementById("wtSquare").clientWidth || 380;
-  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
-  wtWriter = HanziWriter.create(box, c, {
+    '<button class="speak" id="fwSpeak" style="margin-top:0">🔊</button>'+
+    '<span class="p2">格 '+(i+1)+'</span></div>'+
+    '<div class="tzg fw-sq" id="fwSq"><div id="fwQuiz" style="position:absolute;inset:0"></div></div>'+
+    '<div class="fw-btns">'+
+      '<button class="pbtn ghost hz" id="fwClear">重写<span class="py">CLEAR</span></button>'+
+      '<button class="pbtn ghost hz" id="fwSkip">不会写<span class="py">SKIP</span></button>'+
+      '<button class="pbtn primary hz" id="fwDone">写好了<span class="py">DONE</span></button>'+
+    '</div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener("click", e=>{ if(e.target===ov) closeFocus(); });
+  document.getElementById("fwSpeak").onclick = ()=>speak(c);
+  document.getElementById("fwClear").onclick = ()=>{ delete WT.ink[i]; delete WT.mistakes[i]; startFocusQuiz(c, i); };
+  document.getElementById("fwSkip").onclick = ()=>{ WT.ink[i] = ""; WT.mistakes[i] = -1; closeFocus(); };
+  document.getElementById("fwDone").onclick = ()=>closeFocus();
+  startFocusQuiz(c, i);
+}
+function startFocusQuiz(c, i){
+  const box = document.getElementById("fwQuiz"); box.innerHTML = "";
+  const size = document.getElementById("fwSq").clientWidth || 340;
+  try{ if(focusWriter) focusWriter.cancelQuiz(); }catch(e){}
+  focusWriter = HanziWriter.create(box, c, {
     width:size, height:size, padding:Math.round(size*0.1),
     showCharacter:false, showOutline:false, showHintAfterMisses:999,
-    drawingColor:"#2B2723", drawingWidth:Math.max(12, size/26),
+    drawingColor:"#2B2723", drawingWidth:Math.max(11, size/28),
     leniency:1.2, highlightOnComplete:false,
     charDataLoader:(x,done)=>done(STROKES[x])
   });
-  wtWriter.quiz({ onComplete: summary => {
-    const n = STROKES[c].strokes.length;
-    const ok = summary.totalMistakes <= Math.max(2, Math.floor(n*0.34));
-    WT.res[WT.i] = {c, ok, mistakes: summary.totalMistakes, skipped:false};
-    WT.i++; setTimeout(nextTestChar, 350);
+  focusWriter.quiz({ onComplete: summary => {
+    WT.mistakes[i] = summary.totalMistakes;
+    WT.ink[i] = miniSVG(c);
+    setTimeout(closeFocus, 250);
   }});
 }
-document.getElementById("wtSkip").onclick = ()=>{
-  if(!WT) return;
-  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
-  WT.res[WT.i] = {c: WT.chars[WT.i], ok:false, mistakes:-1, skipped:true};
-  WT.i++; nextTestChar();
+function miniSVG(c){
+  // small preview of the character as written, for the worksheet cell
+  return charSVG(c, {fill:"#2B2723"});
+}
+function closeFocus(){
+  try{ if(focusWriter) focusWriter.cancelQuiz(); }catch(e){}
+  focusWriter = null;
+  const ov = document.getElementById("wtFocus"); if(ov) ov.remove();
+  if(WT){ WT.cur = null; renderSheet(); }
+  focusIdx = null;
+}
+document.getElementById("wtUndo").onclick = ()=>{
+  const keys = Object.keys(WT.ink);
+  if(!keys.length) return;
+  const last = keys[keys.length-1];
+  delete WT.ink[last]; delete WT.mistakes[last];
+  renderSheet();
+};
+document.getElementById("wtSubmit").onclick = ()=>{
+  const done = Object.keys(WT.ink).length;
+  if(done < WT.chars.length){
+    if(!window.confirm((WT.chars.length-done)+" boxes are still empty — they'll be marked wrong. Submit anyway?")) return;
+  }
+  finishTest();
 };
 function finishTest(){
-  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
-  wtWriter = null;
+  closeFocus();
+  // grade every box from the strokes actually written
+  WT.res = WT.chars.map((c,i)=>{
+    const m = WT.mistakes[i];
+    const n = STROKES[c].strokes.length;
+    if(m===undefined) return {c, ok:false, mistakes:-1, skipped:true};   // never attempted
+    if(m<0) return {c, ok:false, mistakes:-1, skipped:true};             // explicitly skipped
+    return {c, ok: m <= Math.max(2, Math.floor(n*0.34)), mistakes:m, skipped:false};
+  });
   const N = WT.chars.length, good = WT.res.filter(r=>r.ok).length;
   const pct = Math.round(good/N*100), pass = pct >= 80;
   // record
@@ -1245,11 +1339,12 @@ function finishTest(){
   if(pass){ statBump("test",1);
     if(WT.gated && ADAPT.pos < UNITS.length-1){ ADAPT.pos++; advanced = true; } }
   saveAdapt();
-  renderStrip(true);
   document.getElementById("wtLive").classList.add("hidden");
   const R = document.getElementById("wtResults");
-  let html = '<div class="wt-strip">'+WT.chars.map((c,i)=>
-      '<div class="wt-cell tzg '+(WT.res[i].ok?"ok":"bad")+'">'+c+'</div>').join("")+'</div>'+
+  let html = '<div class="wt-sheet" style="margin-bottom:14px">'+WT.chars.map((c,i)=>
+      '<div class="wt-box tzg '+(WT.res[i].ok?"ok":"bad")+'"><span class="n">'+(i+1)+'</span>'+
+      '<span class="mark">'+(WT.res[i].ok?"✓":"✗")+'</span>'+
+      '<span class="ink">'+charSVG(c,{fill:"#2B2723"})+'</span></div>').join("")+'</div>'+
     '<div class="wt-score '+(pass?"pass":"fail")+'">'+good+' / '+N+' · '+pct+'%'+(pass?" 🏅":"")+'</div>';
   if(advanced) html += '<div class="qz-done" style="text-align:center">🚩 过关! Unlocked: '+posLabel(ADAPT.pos)+'</div>';
   else if(pass) html += '<div class="qz-done" style="text-align:center">全部通过! Great writing!</div>';
