@@ -269,6 +269,45 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 .sync-status.err{color:var(--red)}
 .sync-note{font-size:12px;color:var(--ink-soft);margin-top:10px;text-align:left}
 
+/* placement + writing test */
+.ad-banner{background:#fff;border:2px solid var(--gold);border-radius:var(--r);padding:14px 16px;margin-bottom:18px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ad-banner .big{font-size:26px}
+.ad-banner .tx{flex:1;min-width:200px}
+.ad-banner .tx b{font-size:16px}
+.ad-banner .tx div{font-size:13px;color:var(--ink-soft);font-weight:700;margin-top:2px}
+.ad-banner .pbtn{font-size:15px;padding:10px 16px}
+.ad-link{font-size:12px;font-weight:800;color:var(--ink-soft);text-decoration:underline;margin-left:4px}
+.unit-h .now{background:var(--gold);color:#fff;border-radius:8px;padding:3px 10px;font-weight:900;font-size:12px}
+.as-card{max-width:560px;margin:0 auto;text-align:center}
+.as-prog{display:flex;gap:6px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.as-prog i{width:12px;height:12px;border-radius:50%;background:#E7DFD0}
+.as-prog i.on{background:var(--gold)}
+.as-prog i.done{background:var(--jade)}
+.as-prompt{font-size:15px;font-weight:800;color:var(--ink-soft);margin-bottom:10px}
+.as-big{font-family:var(--hanzi);font-size:84px;line-height:1.2;min-height:110px;display:flex;align-items:center;justify-content:center}
+.as-big.small{font-family:var(--ui);font-size:30px;font-weight:900}
+.as-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.as-opt{padding:16px 10px;border-radius:14px;border:2px solid #E3DCCE;background:#fff;font-size:22px;font-weight:800}
+.as-opt.hzopt{font-family:var(--hanzi);font-size:40px}
+.as-opt.right{border-color:var(--jade);background:var(--jade-soft)}
+.as-opt.wrong{border-color:var(--red);background:var(--red-soft);animation:shake .3s}
+.wt-strip{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;margin-bottom:14px}
+.wt-cell{aspect-ratio:1;border-width:1.5px;display:flex;align-items:center;justify-content:center;font-family:var(--hanzi);font-size:17px;color:var(--ink)}
+.wt-cell.cur{box-shadow:0 0 0 3px var(--gold)}
+.wt-cell.done{background:#F0EBE0}
+.wt-cell.ok{background:var(--jade-soft);border-color:var(--jade)}
+.wt-cell.bad{background:var(--red-soft);border-color:var(--red)}
+.wt-prompt{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+.wt-prompt .p1{font-size:30px;font-weight:900}
+.wt-prompt .p2{font-size:16px;color:var(--ink-soft);font-weight:700}
+.wt-score{font-size:38px;font-weight:900;text-align:center;margin:8px 0}
+.wt-score.pass{color:var(--jade)} .wt-score.fail{color:var(--red)}
+.wt-wrongrow{display:flex;align-items:center;gap:12px;background:var(--paper);border:1.5px solid #EAD9D3;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.wt-wrongrow .wc{font-family:var(--hanzi);font-size:38px;min-width:48px;text-align:center}
+.wt-wrongrow .wi{flex:1;font-size:14px;font-weight:700;color:var(--ink-soft)}
+.wt-wrongrow .wi b{color:var(--ink);font-size:16px}
+
 /* bottom sheet */
 #sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;transform:translateY(110%);transition:transform .22s ease;padding:0 12px 12px}
 #sheet.open{transform:translateY(0)}
@@ -331,6 +370,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
   <section id="viewWriteList">
     <h2 class="sect">写字练习 · Handwriting by unit</h2>
     <p class="sub">Write-list characters in teaching order, P1 to P3. Each character: learn it, then write it 50 times — tracing first, then from memory.</p>
+    <div id="adaptBanner"></div>
     <div class="chips-row" id="writeLevels"></div>
     <div id="unitList"></div>
   </section>
@@ -381,6 +421,35 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
         <div class="stage-note" id="stageNote"></div>
         <div id="gallery"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ PLACEMENT ASSESSMENT ============ -->
+  <section id="viewAssess" class="hidden">
+    <button class="backbtn" id="assessQuit">← 退出 quit assessment</button>
+    <div class="panel as-card">
+      <div class="as-prog" id="asProg"></div>
+      <div id="asBody"></div>
+    </div>
+  </section>
+
+  <!-- ============ WRITING TEST (20 boxes) ============ -->
+  <section id="viewTest" class="hidden">
+    <button class="backbtn" id="testQuit">← 退出 quit test</button>
+    <div class="panel" style="max-width:640px;margin:0 auto">
+      <div id="wtLive">
+        <div class="wt-strip" id="wtStrip"></div>
+        <div class="wt-prompt" id="wtPrompt"></div>
+        <div id="padWrapT" style="width:min(100%,400px);margin:0 auto;position:relative">
+          <div class="tzg" id="wtSquare" style="width:100%;aspect-ratio:1;position:relative">
+            <div id="wtQuiz" style="position:absolute;inset:0"></div>
+          </div>
+        </div>
+        <div class="padbtns">
+          <button class="pbtn ghost hz" id="wtSkip">不会写<span class="py">SKIP — MARK WRONG</span></button>
+        </div>
+      </div>
+      <div id="wtResults" class="hidden"></div>
     </div>
   </section>
 
@@ -571,8 +640,12 @@ let progress = {}, tricky = [];
 async function loadState(){
   try{ const p = await stGet("p1-progress"); if(p) progress = JSON.parse(p); }catch(e){}
   try{ const t = await stGet("p1-tricky"); if(t) tricky = JSON.parse(t); }catch(e){}
+  ADAPT = {pos:null, wrong:{}, tests:[]};
+  try{ const a = await stGet("p1-adaptive"); if(a){ const x = JSON.parse(a); ADAPT = Object.assign(ADAPT, x); } }catch(e){}
 }
+let ADAPT = {pos:null, wrong:{}, tests:[]};
 const saveProgress = ()=>stSet("p1-progress", JSON.stringify(progress));
+const saveAdapt = ()=>stSet("p1-adaptive", JSON.stringify(ADAPT));
 const saveTricky = ()=>stSet("p1-tricky", JSON.stringify(tricky));
 
 /* ---- session resume: where the student was, so exiting the app loses nothing ---- */
@@ -624,11 +697,11 @@ function charSVG(ch, opts){
 const toneSpan = (py,t)=>'<span class="t'+t+'">'+py+'</span>';
 
 /* ================= ROUTER ================= */
-const views = ["viewPy","viewWriteList","viewChar","viewDict","viewReadList","viewPassage"];
+const views = ["viewPy","viewWriteList","viewChar","viewDict","viewReadList","viewPassage","viewAssess","viewTest"];
 function show(id){
   activeView = id;
   views.forEach(v=>document.getElementById(v).classList.toggle("hidden", v!==id));
-  const map = {viewPy:"tabPy",viewWriteList:"tabWrite",viewChar:"tabWrite",viewDict:"tabDict",viewReadList:"tabRead",viewPassage:"tabRead"};
+  const map = {viewPy:"tabPy",viewWriteList:"tabWrite",viewChar:"tabWrite",viewAssess:"tabWrite",viewTest:"tabWrite",viewDict:"tabDict",viewReadList:"tabRead",viewPassage:"tabRead"};
   const cls = {tabPy:"on-py",tabWrite:"on-write",tabDict:"on-dict",tabRead:"on-read"};
   ["tabPy","tabWrite","tabDict","tabRead"].forEach(t=>{
     document.getElementById(t).className = "tab hz"+(map[id]===t?" "+cls[t]:"");
@@ -689,12 +762,15 @@ function renderUnits(){
     b.onclick = ()=>{ writeLvl=l; renderUnits(); saveSession(); };
     lc.appendChild(b);
   });
+  renderAdaptBanner();
   const box = document.getElementById("unitList"); box.innerHTML = "";
   UNITS.filter(u=>u.lvl===writeLvl).forEach(u=>{
     const sec = document.createElement("div"); sec.className = "unit";
     const done = u.chars.filter(c=>(progress[c]||0)>=50).length;
     sec.innerHTML = '<div class="unit-h"><span class="un">P'+u.lvl+'·U'+u.n+'</span><span class="ut">'+u.title+'</span>'+
-      '<span class="ue">'+u.en+'</span><span class="up">'+done+'/'+u.chars.length+' ✓</span></div>';
+      '<span class="ue">'+u.en+'</span>'+
+      ((ADAPT.pos!==null && UNITS[ADAPT.pos]===u)?'<span class="now">📍 当前 NOW</span>':'')+
+      '<span class="up">'+done+'/'+u.chars.length+' ✓</span></div>';
     const grid = document.createElement("div"); grid.className = "char-grid";
     u.chars.forEach(ch=>{
       const c = CHARS[ch], reps = progress[ch]||0, pct = Math.min(100, reps*2);
@@ -953,6 +1029,250 @@ document.getElementById("dictReveal").onclick = ()=>{
 };
 document.getElementById("dictRight").onclick = ()=>{ dictOK++; statBump("dict",1); nextDictWord(true); };
 document.getElementById("dictWrong").onclick = ()=>{ dictNo++; nextDictWord(true); };
+
+/* ================= ADAPTIVE ENGINE ================= */
+const posLabel = i => "P"+UNITS[i].lvl+" · U"+UNITS[i].n+" "+UNITS[i].title;
+function renderAdaptBanner(){
+  const el = document.getElementById("adaptBanner"); if(!el) return;
+  if(ADAPT.pos===null){
+    el.innerHTML = '<div class="ad-banner"><span class="big">📍</span>'+
+      '<div class="tx"><b>先找到你的起点 Find your starting point</b>'+
+      '<div>A short quiz finds the right level, then the app builds from there.</div></div>'+
+      '<button class="pbtn primary hz" id="adStart">开始评估<span class="py">START — ~25 QUICK QUESTIONS</span></button></div>';
+    document.getElementById("adStart").onclick = startAssess;
+  }else{
+    const u = UNITS[ADAPT.pos];
+    el.innerHTML = '<div class="ad-banner"><span class="big">🚩</span>'+
+      '<div class="tx"><b>当前关卡 Current stage: '+posLabel(ADAPT.pos)+'</b>'+
+      '<div>Practise this unit, then pass the 20-box writing test (80%+) to unlock the next one.</div></div>'+
+      '<button class="pbtn ghost hz" id="adGo">去练习<span class="py">GO TO UNIT</span></button>'+
+      '<button class="pbtn primary hz" id="adTest">闯关测验<span class="py">WRITING TEST · 20 boxes</span></button>'+
+      '<button class="ad-link" id="adRedo">重新评估 retake placement</button></div>';
+    document.getElementById("adGo").onclick = ()=>{ writeLvl = u.lvl; renderUnits(); saveSession(); };
+    document.getElementById("adTest").onclick = ()=>startTest(true);
+    document.getElementById("adRedo").onclick = ()=>{ if(window.confirm("Retake the placement quiz? Your practice progress is kept.")) startAssess(); };
+  }
+}
+
+/* ---- placement assessment: staircase over the 31-unit sequence ---- */
+let AS = null;
+const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+function pickDistractors(idx, target, keyFn, n){
+  const pool = [];
+  for(let d = Math.max(0,idx-4); d <= Math.min(UNITS.length-1, idx+4); d++)
+    UNITS[d].chars.forEach(c=>{ if(c!==target && keyFn(CHARS[c])!==keyFn(CHARS[target])) pool.push(c); });
+  return shuffle([...new Set(pool)]).slice(0,n);
+}
+function makeQuestion(idx){
+  const c = UNITS[idx].chars[Math.floor(Math.random()*UNITS[idx].chars.length)];
+  const info = CHARS[c];
+  const type = Math.floor(Math.random()*3);
+  if(type===0){
+    const ds = pickDistractors(idx, c, x=>x.en, 3);
+    const opts = shuffle([c, ...ds].map(x=>({t:CHARS[x].en, ok:x===c})));
+    return {prompt:c, promptCls:"", ask:"这个字是什么意思？ What does it mean?", opts, hz:false};
+  }
+  if(type===1){
+    const ds = pickDistractors(idx, c, x=>x.en, 3);
+    const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
+    return {prompt:info.en, promptCls:"small", ask:"哪个字是这个意思？ Which character means this?", opts, hz:true};
+  }
+  const ds = pickDistractors(idx, c, x=>x.py, 3);
+  const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
+  return {prompt:'<span class="t'+info.tone+'">'+info.py+'</span>', promptCls:"small", ask:"哪个字读这个音？ Which character has this sound?", opts, hz:true};
+}
+function startAssess(){
+  AS = {pos:10, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0, done:false};
+  show("viewAssess");
+  nextAssessQ();
+}
+document.getElementById("assessQuit").onclick = ()=>{ AS = null; show("viewWriteList"); renderUnits(); };
+function assessProg(){
+  const el = document.getElementById("asProg"); el.innerHTML = "";
+  const totalBlocks = AS.steps.length + 1;
+  for(let b=0;b<totalBlocks;b++) for(let q=0;q<5;q++){
+    const i = document.createElement("i");
+    const gi = b*5+q;
+    if(gi < AS.total) i.className = "done"; else if(gi === AS.total) i.className = "on";
+    el.appendChild(i);
+  }
+}
+function nextAssessQ(){
+  assessProg();
+  const q = makeQuestion(AS.pos);
+  const body = document.getElementById("asBody");
+  body.innerHTML = '<div class="as-prompt">'+q.ask+'</div>'+
+    '<div class="as-big '+q.promptCls+'">'+q.prompt+'</div><div class="as-opts" id="asOpts"></div>';
+  const box = document.getElementById("asOpts");
+  q.opts.forEach(o=>{
+    const b = document.createElement("button");
+    b.className = "as-opt"+(q.hz?" hzopt":"");
+    b.textContent = o.t;
+    b.onclick = ()=>{
+      if(b.dataset.lock) return;
+      [...box.children].forEach(x=>x.dataset.lock=1);
+      if(o.ok){ b.classList.add("right"); AS.blockScore++; }
+      else{
+        b.classList.add("wrong");
+        [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); });
+      }
+      AS.total++; AS.qInBlock++;
+      setTimeout(()=>{
+        if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ();
+      }, 650);
+    };
+    box.appendChild(b);
+  });
+}
+function endAssessBlock(){
+  const step = AS.steps[AS.block];
+  if(step===undefined){ return finishAssess(); }
+  if(AS.blockScore>=4) AS.pos = Math.min(UNITS.length-1, AS.pos+step);
+  else if(AS.blockScore<=2) AS.pos = Math.max(0, AS.pos-step);
+  AS.block++; AS.qInBlock = 0; AS.blockScore = 0;
+  if(AS.block >= AS.steps.length+1) finishAssess(); else nextAssessQ();
+}
+function finishAssess(){
+  ADAPT.pos = AS.pos; saveAdapt(); statBump("test",0);
+  const body = document.getElementById("asBody");
+  document.getElementById("asProg").innerHTML = "";
+  body.innerHTML = '<div style="font-size:56px">🎯</div>'+
+    '<div class="pf-h" style="font-size:26px">你的起点 Your starting point</div>'+
+    '<div class="wt-score pass" style="font-size:28px">'+posLabel(ADAPT.pos)+'</div>'+
+    '<div class="pf-sub">The app will guide practice from here — pass writing tests to move up.</div>'+
+    '<button class="pbtn primary hz" id="asGo">开始学习 →<span class="py">START LEARNING</span></button>';
+  document.getElementById("asGo").onclick = ()=>{ writeLvl = UNITS[ADAPT.pos].lvl; show("viewWriteList"); renderUnits(); saveSession(); };
+  AS = null;
+}
+
+/* ---- 20-box writing test (unassisted, graded at the end) ---- */
+let WT = null, wtWriter = null;
+function testPool(){
+  const maxIdx = (ADAPT.pos!==null) ? ADAPT.pos : UNITS.map((u,i)=>u.lvl===writeLvl?i:-1).filter(i=>i>=0).pop();
+  const pool = [];
+  for(let i=0;i<=maxIdx;i++) pool.push(...UNITS[i].chars.map(c=>({c, unit:i})));
+  return {pool, maxIdx};
+}
+function pickTestChars(){
+  const {pool, maxIdx} = testPool();
+  const N = Math.min(20, pool.length);
+  const chosen = [], used = new Set();
+  const wrongs = shuffle(pool.filter(x=>(ADAPT.wrong[x.c]||0)>0)).slice(0, 8);
+  wrongs.forEach(x=>{ chosen.push(x); used.add(x.c); });
+  const recent = pool.filter(x=>x.unit>=Math.max(0,maxIdx-5) && !used.has(x.c));
+  const older = pool.filter(x=>x.unit<Math.max(0,maxIdx-5) && !used.has(x.c));
+  shuffle(recent); shuffle(older);
+  while(chosen.length<N && (recent.length||older.length)){
+    const src = (recent.length && (Math.random()<0.65 || !older.length)) ? recent : older;
+    const x = src.pop();
+    if(!used.has(x.c)){ chosen.push(x); used.add(x.c); }
+  }
+  return shuffle(chosen).map(x=>x.c);
+}
+function startTest(gated){
+  WT = {chars: pickTestChars(), i:0, res:[], gated: !!gated && ADAPT.pos!==null};
+  document.getElementById("wtLive").classList.remove("hidden");
+  document.getElementById("wtResults").classList.add("hidden");
+  show("viewTest");
+  renderStrip();
+  nextTestChar();
+}
+document.getElementById("testQuit").onclick = ()=>{
+  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
+  wtWriter = null; WT = null; show("viewWriteList"); renderUnits();
+};
+function renderStrip(reveal){
+  const s = document.getElementById("wtStrip"); s.innerHTML = "";
+  WT.chars.forEach((c,i)=>{
+    const d = document.createElement("div");
+    let cls = "wt-cell tzg";
+    if(reveal){ cls += WT.res[i] && WT.res[i].ok ? " ok" : " bad"; }
+    else{
+      if(i<WT.i) cls += " done";
+      if(i===WT.i) cls += " cur";
+    }
+    d.className = cls;
+    d.textContent = reveal ? c : (i+1);
+    s.appendChild(d);
+  });
+}
+function nextTestChar(){
+  if(WT.i >= WT.chars.length) return finishTest();
+  renderStrip();
+  const c = WT.chars[WT.i], info = CHARS[c];
+  const pr = document.getElementById("wtPrompt");
+  pr.innerHTML = '<span class="p1"><span class="t'+info.tone+'">'+info.py+'</span></span>'+
+    '<span class="p2">'+info.en+'</span>'+
+    '<button class="speak" id="wtSpeak" style="margin-top:0">🔊</button>'+
+    '<span class="p2">'+(WT.i+1)+' / '+WT.chars.length+'</span>';
+  document.getElementById("wtSpeak").onclick = ()=>speak(c);
+  const box = document.getElementById("wtQuiz"); box.innerHTML = "";
+  const size = document.getElementById("wtSquare").clientWidth || 380;
+  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
+  wtWriter = HanziWriter.create(box, c, {
+    width:size, height:size, padding:Math.round(size*0.1),
+    showCharacter:false, showOutline:false, showHintAfterMisses:999,
+    drawingColor:"#2B2723", drawingWidth:Math.max(12, size/26),
+    leniency:1.2, highlightOnComplete:false,
+    charDataLoader:(x,done)=>done(STROKES[x])
+  });
+  wtWriter.quiz({ onComplete: summary => {
+    const n = STROKES[c].strokes.length;
+    const ok = summary.totalMistakes <= Math.max(2, Math.floor(n*0.34));
+    WT.res[WT.i] = {c, ok, mistakes: summary.totalMistakes, skipped:false};
+    WT.i++; setTimeout(nextTestChar, 350);
+  }});
+}
+document.getElementById("wtSkip").onclick = ()=>{
+  if(!WT) return;
+  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
+  WT.res[WT.i] = {c: WT.chars[WT.i], ok:false, mistakes:-1, skipped:true};
+  WT.i++; nextTestChar();
+};
+function finishTest(){
+  try{ if(wtWriter) wtWriter.cancelQuiz(); }catch(e){}
+  wtWriter = null;
+  const N = WT.chars.length, good = WT.res.filter(r=>r.ok).length;
+  const pct = Math.round(good/N*100), pass = pct >= 80;
+  // record
+  WT.res.forEach(r=>{
+    if(r.ok){ if(ADAPT.wrong[r.c]) delete ADAPT.wrong[r.c]; }
+    else ADAPT.wrong[r.c] = (ADAPT.wrong[r.c]||0)+1;
+  });
+  ADAPT.tests.push({ts: Date.now(), score: pct, n: N, wrong: WT.res.filter(r=>!r.ok).map(r=>r.c)});
+  if(ADAPT.tests.length>30) ADAPT.tests = ADAPT.tests.slice(-30);
+  let advanced = false;
+  if(pass){ statBump("test",1);
+    if(WT.gated && ADAPT.pos < UNITS.length-1){ ADAPT.pos++; advanced = true; } }
+  saveAdapt();
+  renderStrip(true);
+  document.getElementById("wtLive").classList.add("hidden");
+  const R = document.getElementById("wtResults");
+  let html = '<div class="wt-strip">'+WT.chars.map((c,i)=>
+      '<div class="wt-cell tzg '+(WT.res[i].ok?"ok":"bad")+'">'+c+'</div>').join("")+'</div>'+
+    '<div class="wt-score '+(pass?"pass":"fail")+'">'+good+' / '+N+' · '+pct+'%'+(pass?" 🏅":"")+'</div>';
+  if(advanced) html += '<div class="qz-done" style="text-align:center">🚩 过关! Unlocked: '+posLabel(ADAPT.pos)+'</div>';
+  else if(pass) html += '<div class="qz-done" style="text-align:center">全部通过! Great writing!</div>';
+  else html += '<div style="text-align:center;font-weight:800;color:var(--ink-soft);margin-bottom:8px">还差一点 — practise the red ones, then test again (need 80%).</div>';
+  const wrong = WT.res.filter(r=>!r.ok);
+  if(wrong.length){
+    html += '<div class="tag" style="background:var(--red)">错字分析</div>';
+    wrong.forEach(r=>{
+      const info = CHARS[r.c], w = info.words[0];
+      html += '<div class="wt-wrongrow"><div class="wc">'+r.c+'</div>'+
+        '<div class="wi"><b><span class="t'+info.tone+'">'+info.py+'</span> · '+info.en+'</b><br>'+
+        w.w+' '+w.py+' · '+(r.skipped ? "skipped" : r.mistakes+" stroke mistakes")+'</div>'+
+        '<button class="pbtn ghost hz wt-fix" data-c="'+r.c+'">练习<span class="py">PRACTISE</span></button></div>';
+    });
+  }
+  html += '<div class="padbtns">'+
+    '<button class="pbtn ghost hz" id="wtBack">返回<span class="py">BACK TO UNITS</span></button>'+
+    '<button class="pbtn primary hz" id="wtAgain">再测一次<span class="py">TEST AGAIN</span></button></div>';
+  R.innerHTML = html; R.classList.remove("hidden");
+  [...R.querySelectorAll(".wt-fix")].forEach(b=>{ b.onclick = ()=>openChar(b.dataset.c); });
+  document.getElementById("wtBack").onclick = ()=>{ WT = null; show("viewWriteList"); renderUnits(); };
+  document.getElementById("wtAgain").onclick = ()=>startTest(WT.gated);
+}
 
 /* ================= READ ================= */
 let curReadLvl = 1;
@@ -1344,6 +1664,7 @@ async function openStats(p){
     if(e.reps) parts.push(e.reps+" 笔");
     if(e.dict) parts.push(e.dict+" 听写✓");
     if(e.quiz) parts.push(e.quiz+" 题✓");
+    if(e.test) parts.push(e.test+" 测验🏅");
     html += '<div class="st-row"><div class="st-day"><b>'+(i===0?"今天 Today":(i===1?"昨天":"周"+wd[d.getDay()]))+
       '</b>'+ (d.getMonth()+1)+"/"+d.getDate() +'</div>'+
       '<div class="st-barwrap"><div class="st-goalline" style="left:'+(GOAL/MAXW*100)+'%"></div>'+
@@ -1370,8 +1691,20 @@ function mergeProgress(a,b){ const o = Object.assign({}, a||{});
 function mergeTricky(a,b){ return [...new Set([].concat(a||[], b||[]))]; }
 function mergeStats(a,b){ const o = JSON.parse(JSON.stringify(a||{}));
   for(const day in (b||{})){ if(!o[day]) o[day] = {};
-    for(const f of ["sec","reps","dict","quiz"]) o[day][f] = Math.max(o[day][f]||0, (b[day]||{})[f]||0); }
+    for(const f of ["sec","reps","dict","quiz","test"]) o[day][f] = Math.max(o[day][f]||0, (b[day]||{})[f]||0); }
   return o; }
+function mergeAdaptive(a,b){
+  if(!a) return b||null; if(!b) return a;
+  const wrong = {};
+  for(const k in (a.wrong||{})) wrong[k] = a.wrong[k];
+  for(const k in (b.wrong||{})) wrong[k] = Math.max(wrong[k]||0, b.wrong[k]);
+  const seen = new Set(), tests = [];
+  [].concat(a.tests||[], b.tests||[]).forEach(t=>{ if(t && !seen.has(t.ts)){ seen.add(t.ts); tests.push(t); } });
+  tests.sort((x,y)=>x.ts-y.ts);
+  const pa = (a.pos===null||a.pos===undefined)?-1:a.pos, pb = (b.pos===null||b.pos===undefined)?-1:b.pos;
+  const pos = Math.max(pa, pb);
+  return {pos: pos<0?null:pos, wrong, tests: tests.slice(-30)};
+}
 function mergeSession(a,b){
   if(!a) return b||null; if(!b) return a;
   return ((a.ts||0) >= (b.ts||0)) ? a : b; }
@@ -1386,13 +1719,13 @@ function mergeProfilesList(a,b){
 }
 async function readUserLocal(id){
   const out = {};
-  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"]]){
+  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"],["p1-adaptive","adaptive"]]){
     try{ const raw = await stGet("u"+id+":"+k); out[fld] = raw ? JSON.parse(raw) : null; }catch(e){ out[fld] = null; }
   }
   return out;
 }
 async function writeUserLocal(id, u){
-  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"]]){
+  for(const [k, fld] of [["p1-progress","progress"],["p1-tricky","tricky"],["p1-session","session"],["p1-stats","stats"],["p1-adaptive","adaptive"]]){
     if(u[fld]!==null && u[fld]!==undefined) await stSet("u"+id+":"+k, JSON.stringify(u[fld]));
   }
 }
@@ -1418,7 +1751,8 @@ async function syncNow(pushOnly){
         progress: mergeProgress(loc.progress, cld.progress),
         tricky: mergeTricky(loc.tricky, cld.tricky),
         session: mergeSession(loc.session, cld.session),
-        stats: mergeStats(loc.stats, cld.stats)
+        stats: mergeStats(loc.stats, cld.stats),
+        adaptive: mergeAdaptive(loc.adaptive, cld.adaptive)
       };
       await writeUserLocal(p.id, merged);
       users[p.id] = merged;
@@ -1429,6 +1763,7 @@ async function syncNow(pushOnly){
       try{
         const raw = await stGet("p1-progress"); if(raw) progress = JSON.parse(raw);
         const tr = await stGet("p1-tricky"); if(tr) tricky = JSON.parse(tr);
+        const ad = await stGet("p1-adaptive"); if(ad) ADAPT = Object.assign({pos:null,wrong:{},tests:[]}, JSON.parse(ad));
       }catch(e){}
     }
     await withTimeout(fetch(famUrl(cfg), {method:"PUT", headers:{"Content-Type":"application/json"},
