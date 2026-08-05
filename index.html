@@ -362,7 +362,7 @@ ruby rt{font-family:var(--ui);font-size:12px;font-weight:700;letter-spacing:0}
 <header>
   <div class="brand">
     <div class="seal">文</div>
-    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v9</small></h1>
+    <h1>华文馆<small>Cosmic Academy · P1–P3 Chinese · build v11</small></h1>
   </div>
   <nav>
     <button class="tab hz" id="tabPy">拼音<span class="py">PINYIN</span></button>
@@ -673,10 +673,10 @@ let progress = {}, tricky = [];
 async function loadState(){
   try{ const p = await stGet("p1-progress"); if(p) progress = JSON.parse(p); }catch(e){}
   try{ const t = await stGet("p1-tricky"); if(t) tricky = JSON.parse(t); }catch(e){}
-  ADAPT = {pos:null, wrong:{}, tests:[]};
+  ADAPT = {pos:null, wrong:{}, tests:[], placement:null};
   try{ const a = await stGet("p1-adaptive"); if(a){ const x = JSON.parse(a); ADAPT = Object.assign(ADAPT, x); } }catch(e){}
 }
-let ADAPT = {pos:null, wrong:{}, tests:[]};
+let ADAPT = {pos:null, wrong:{}, tests:[], placement:null};
 const saveProgress = ()=>stSet("p1-progress", JSON.stringify(progress));
 const saveAdapt = ()=>stSet("p1-adaptive", JSON.stringify(ADAPT));
 const saveTricky = ()=>stSet("p1-tricky", JSON.stringify(tricky));
@@ -699,14 +699,23 @@ function saveSession(){
   saveTimer = setTimeout(()=>{ try{ stSet("p1-session", JSON.stringify(collectSession())); }catch(e){} }, 200);
 }
 window.addEventListener("pagehide", ()=>{ try{ stSet("p1-session", JSON.stringify(collectSession())); }catch(e){} });
-document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="hidden") saveSession(); });
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="hidden"){ stopSpeech(); saveSession(); }
+});
+window.addEventListener("pagehide", stopSpeech);
 
 /* ================= AUDIO ================= */
 let zhVoice = null;
 function pickVoice(){ try{ const vs = speechSynthesis.getVoices();
   zhVoice = vs.find(v=>/zh[-_]CN/i.test(v.lang)) || vs.find(v=>/^zh/i.test(v.lang)) || null; }catch(e){} }
 if("speechSynthesis" in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+let userGestured = false;
+["pointerdown","keydown","touchstart"].forEach(ev=>
+  document.addEventListener(ev, ()=>{ userGestured = true; }, {passive:true, once:false}));
+function stopSpeech(){ try{ speechSynthesis.cancel(); }catch(e){} }
 function speak(text, rate){
+  if(!userGestured) return;              // nothing speaks on load/refresh
+  if(document.visibilityState!=="visible") return;
   try{ if(!("speechSynthesis" in window)) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -739,10 +748,11 @@ function show(id){
   ["tabPy","tabWrite","tabDict","tabRead"].forEach(t=>{
     document.getElementById(t).className = "tab hz"+(map[id]===t?" "+cls[t]:"");
   });
+  stopSpeech();
   closeSheet(); window.scrollTo(0,0);
   saveSession();
 }
-document.getElementById("tabPy").onclick = ()=>{ show("viewPy"); };
+document.getElementById("tabPy").onclick = ()=>{ show("viewPy"); if(gItem) speak(gItem.c, 0.7); };
 document.getElementById("tabWrite").onclick = ()=>{ show("viewWriteList"); renderUnits(); };
 document.getElementById("tabDict").onclick = ()=>{ show("viewDict"); };
 document.getElementById("tabRead").onclick = ()=>{ show("viewReadList"); renderPassList(); };
@@ -960,7 +970,7 @@ function renderPyGrids(){
 }
 /* tone game */
 let gItem = null, gStreak = 0;
-function gameNext(){
+function gameNext(silent){
   gItem = TONEGAME[Math.floor(Math.random()*TONEGAME.length)];
   document.getElementById("gChar").textContent = gItem.c;
   const opts = document.getElementById("gOpts"); opts.innerHTML = "";
@@ -971,7 +981,7 @@ function gameNext(){
       if(i+1===gItem.t){
         b.classList.add("right"); gStreak++;
         document.getElementById("gStreak").textContent = "🔥 连对 "+gStreak+" streak!";
-        setTimeout(gameNext, 700);
+        setTimeout(()=>gameNext(false), 700);
       }else{
         b.classList.remove("wrong"); void b.offsetWidth; b.classList.add("wrong");
         gStreak = 0;
@@ -980,9 +990,9 @@ function gameNext(){
     };
     opts.appendChild(b);
   });
-  speak(gItem.c, 0.7);
+  if(!silent) speak(gItem.c, 0.7);
 }
-document.getElementById("gNext").onclick = gameNext;
+document.getElementById("gNext").onclick = ()=>gameNext(false);
 document.getElementById("gSpeak").onclick = ()=>{ if(gItem) speak(gItem.c, 0.7); };
 
 /* ================= DICTATION ================= */
@@ -1077,7 +1087,10 @@ function renderAdaptBanner(){
     const u = UNITS[ADAPT.pos];
     el.innerHTML = '<div class="ad-banner"><span class="big">🚩</span>'+
       '<div class="tx"><b>当前关卡 Current stage: '+posLabel(ADAPT.pos)+'</b>'+
-      '<div>Practise this unit, then pass the 20-box writing test (80%+) to unlock the next one.</div></div>'+
+      '<div>Practise this unit, then pass the 20-box writing test (80%+) to unlock the next one.</div>'+
+      (ADAPT.placement ? '<div style="font-size:12px;margin-top:4px">👂 '+posLabel(ADAPT.placement.listen)+
+        ' · 👀 '+posLabel(ADAPT.placement.read)+' · ✍️ '+posLabel(ADAPT.placement.write)+'</div>' : '')+
+      '</div>'+
       '<button class="pbtn ghost hz" id="adGo">去练习<span class="py">GO TO UNIT</span></button>'+
       '<button class="pbtn primary hz" id="adTest">闯关测验<span class="py">WRITING TEST · 20 boxes</span></button>'+
       '<button class="ad-link" id="adRedo">重新评估 retake placement</button></div>';
@@ -1129,12 +1142,112 @@ function makeQuestion(idx){
   return {prompt:'<span class="t'+info.tone+'">'+info.py+'</span>', promptCls:"small", ask:"哪个字读这个音？ Which character has this sound?", opts, hz:true, say:c};
 }
 function startAssess(){
-  AS = {pos:10, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0, done:false,
-        asked:new Set(), typeSeq:shuffle([0,1,2])};
+  AS = {phase:"intro", pos:10, steps:[8,4,2,1], block:0, qInBlock:0, blockScore:0, total:0,
+        asked:new Set(), typeSeq:shuffle([0,1,2]),
+        listen:{pos:10, steps:[8,4,2], block:0, qInBlock:0, blockScore:0, correct:0, n:0},
+        writeProbe:{items:[], i:0, res:[]},
+        readPos:null, listenPos:null, writePos:null};
   show("viewAssess");
-  nextAssessQ();
+  renderIntro();
 }
-document.getElementById("assessQuit").onclick = ()=>{ AS = null; show("viewWriteList"); renderUnits(); };
+document.getElementById("assessQuit").onclick = ()=>{ closeProbe(); AS = null; show("viewWriteList"); renderUnits(); };
+
+function renderIntro(){
+  document.getElementById("asProg").innerHTML = "";
+  document.getElementById("asBody").innerHTML =
+    '<div style="font-size:52px">🎯</div>'+
+    '<div class="pf-h" style="font-size:26px">分级测试 Placement check</div>'+
+    '<div class="pf-sub" style="max-width:420px;margin:0 auto 14px">Three short parts — about 5 minutes.</div>'+
+    '<div style="text-align:left;max-width:340px;margin:0 auto 16px">'+
+      '<div class="wt-wrongrow"><div class="wc">👂</div><div class="wi"><b>听 Listening</b><br>Hear a word, choose the character</div></div>'+
+      '<div class="wt-wrongrow"><div class="wc">👀</div><div class="wi"><b>读 Reading</b><br>Meanings and sounds of characters</div></div>'+
+      '<div class="wt-wrongrow"><div class="wc">✍️</div><div class="wi"><b>写 Writing</b><br>Write a few characters from memory</div></div>'+
+    '</div>'+
+    '<button class="pbtn primary hz" id="asBegin">开始 →<span class="py">BEGIN — LISTENING FIRST</span></button>';
+  document.getElementById("asBegin").onclick = ()=>{ AS.phase = "listen"; nextListenQ(); };
+}
+
+/* ---------- PHASE 1: listening staircase (audio only, no character shown) ---------- */
+function makeListenQuestion(idx){
+  let pool = levelPool(idx).filter(c=>!AS.asked.has(c));
+  if(!pool.length){ pool = levelPool(idx); AS.asked = new Set(); }
+  const c = pool[Math.floor(Math.random()*pool.length)];
+  AS.asked.add(c);
+  const meaning = Math.random() < 0.4;
+  const ds = pickDistractors(idx, c, x=>meaning?x.en:x.py, 3);
+  if(meaning){
+    const opts = shuffle([c, ...ds].map(x=>({t:CHARS[x].en, ok:x===c})));
+    return {say:c, ask:"听一听 · 这个字是什么意思？ What does the word you hear mean?", opts, hz:false};
+  }
+  const opts = shuffle([c, ...ds].map(x=>({t:x, ok:x===c})));
+  return {say:c, ask:"听一听 · 你听到哪个字？ Which character did you hear?", opts, hz:true};
+}
+function listenProg(){
+  const el = document.getElementById("asProg"); el.innerHTML = "";
+  const L = AS.listen, total = (L.steps.length+1)*4;
+  for(let i=0;i<total;i++){
+    const d = document.createElement("i");
+    if(i < L.n) d.className = "done"; else if(i === L.n) d.className = "on";
+    el.appendChild(d);
+  }
+}
+function nextListenQ(){
+  listenProg();
+  const L = AS.listen;
+  const q = makeListenQuestion(L.pos);
+  document.getElementById("asBody").innerHTML =
+    '<div class="as-prompt">'+q.ask+'</div>'+
+    '<div class="as-big" style="font-size:64px">🔊</div>'+
+    '<button class="speak" id="asSpeak">🔊 再听一次 listen again</button>'+
+    '<div class="as-opts" id="asOpts"></div>';
+  document.getElementById("asSpeak").onclick = ()=>speak(q.say, 0.7);
+  setTimeout(()=>{ if(AS && AS.phase==="listen" && activeView==="viewAssess") speak(q.say, 0.7); }, 300);
+  const box = document.getElementById("asOpts");
+  q.opts.forEach(o=>{
+    const b = document.createElement("button");
+    b.className = "as-opt"+(q.hz?" hzopt":"");
+    b.textContent = o.t;
+    b.onclick = ()=>{
+      if(b.dataset.lock) return;
+      [...box.children].forEach(x=>x.dataset.lock=1);
+      if(o.ok){ b.classList.add("right"); L.blockScore++; L.correct++; }
+      else{ b.classList.add("wrong"); [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); }); }
+      L.n++; L.qInBlock++;
+      setTimeout(()=>{
+        if(L.qInBlock>=4) endListenBlock(); else nextListenQ();
+      }, 600);
+    };
+    box.appendChild(b);
+  });
+}
+function endListenBlock(){
+  const L = AS.listen, step = L.steps[L.block];
+  if(step!==undefined){
+    if(L.blockScore>=3) L.pos = Math.min(UNITS.length-1, L.pos+step);
+    else if(L.blockScore<=1) L.pos = Math.max(0, L.pos-step);
+  }
+  L.block++; L.qInBlock = 0; L.blockScore = 0;
+  if(L.block >= L.steps.length+1){
+    AS.listenPos = L.pos;
+    AS.phase = "read";
+    AS.pos = L.pos;                       // start reading near the listening result
+    AS.asked = new Set();
+    phaseCard("👀","读 Reading", "Now look at the characters.", nextAssessQ);
+  }else nextListenQ();
+}
+
+/* ---------- phase transition card ---------- */
+function phaseCard(icon, title, sub, next){
+  document.getElementById("asProg").innerHTML = "";
+  document.getElementById("asBody").innerHTML =
+    '<div style="font-size:52px">'+icon+'</div>'+
+    '<div class="pf-h" style="font-size:26px">'+title+'</div>'+
+    '<div class="pf-sub">'+sub+'</div>'+
+    '<button class="pbtn primary hz" id="asNextPhase">继续 →<span class="py">CONTINUE</span></button>';
+  document.getElementById("asNextPhase").onclick = next;
+}
+
+/* ---------- PHASE 2: reading staircase ---------- */
 function assessProg(){
   const el = document.getElementById("asProg"); el.innerHTML = "";
   const totalBlocks = AS.steps.length + 1;
@@ -1155,7 +1268,7 @@ function nextAssessQ(){
     '<div class="as-opts" id="asOpts"></div>';
   if(q.say){
     document.getElementById("asSpeak").onclick = ()=>speak(q.say);
-    setTimeout(()=>speak(q.say), 250);
+    setTimeout(()=>{ if(AS && AS.phase==="read" && activeView==="viewAssess") speak(q.say); }, 250);
   }
   const box = document.getElementById("asOpts");
   q.opts.forEach(o=>{
@@ -1166,35 +1279,135 @@ function nextAssessQ(){
       if(b.dataset.lock) return;
       [...box.children].forEach(x=>x.dataset.lock=1);
       if(o.ok){ b.classList.add("right"); AS.blockScore++; }
-      else{
-        b.classList.add("wrong");
-        [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); });
-      }
-      if(!q.say) speak(q.answerChar||"");   // "which character means X" — hear the right answer
+      else{ b.classList.add("wrong"); [...box.children].forEach((x,i)=>{ if(q.opts[i].ok) x.classList.add("right"); }); }
+      if(!q.say) speak(q.answerChar||"");
       AS.total++; AS.qInBlock++;
-      setTimeout(()=>{
-        if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ();
-      }, 650);
+      setTimeout(()=>{ if(AS.qInBlock>=5) endAssessBlock(); else nextAssessQ(); }, 650);
     };
     box.appendChild(b);
   });
 }
 function endAssessBlock(){
   const step = AS.steps[AS.block];
-  if(step===undefined){ return finishAssess(); }
-  if(AS.blockScore>=4) AS.pos = Math.min(UNITS.length-1, AS.pos+step);
-  else if(AS.blockScore<=2) AS.pos = Math.max(0, AS.pos-step);
+  if(step!==undefined){
+    if(AS.blockScore>=4) AS.pos = Math.min(UNITS.length-1, AS.pos+step);
+    else if(AS.blockScore<=2) AS.pos = Math.max(0, AS.pos-step);
+  }
   AS.block++; AS.qInBlock = 0; AS.blockScore = 0;
-  if(AS.block >= AS.steps.length+1) finishAssess(); else nextAssessQ();
+  if(AS.block >= AS.steps.length+1){
+    AS.readPos = AS.pos;
+    AS.phase = "write";
+    buildWriteProbe();
+    phaseCard("✍️","写 Writing","Write these from memory — no tracing lines. Do your best!", nextProbe);
+  }else nextAssessQ();
 }
+
+/* ---------- PHASE 3: writing probe (6 characters, spread around the reading level) ---------- */
+function buildWriteProbe(){
+  AS.writeProbe = {items:[], i:0, res:[], pos:AS.readPos, step:8, used:new Set(), N:6};
+  nextProbeItem();
+}
+function nextProbeItem(){
+  const P = AS.writeProbe;
+  const idx = Math.max(0, Math.min(UNITS.length-1, P.pos));
+  const pool = UNITS[idx].chars.filter(c=>!P.used.has(c));
+  const near = pool.length ? pool : levelPool(idx).filter(c=>!P.used.has(c));
+  const list = near.length ? near : UNITS[idx].chars;
+  const c = list[Math.floor(Math.random()*list.length)];
+  P.used.add(c);
+  P.items.push({c, idx});
+}
+function advanceProbe(ok, idx){
+  const P = AS.writeProbe;
+  if(ok) P.pos = Math.min(UNITS.length-1, idx + Math.max(1, Math.floor(P.step/2)));
+  else P.pos = Math.max(0, idx - P.step);
+  P.step = Math.max(1, Math.floor(P.step/2));
+  if(P.items.length < P.N) nextProbeItem();
+}
+let probeWriter = null;
+function closeProbe(){
+  try{ if(probeWriter) probeWriter.cancelQuiz(); }catch(e){}
+  probeWriter = null;
+}
+function probeProg(){
+  const el = document.getElementById("asProg"); el.innerHTML = "";
+  const P = AS.writeProbe;
+  for(let i=0;i<P.N;i++){
+    const d = document.createElement("i");
+    if(i < P.i) d.className = "done"; else if(i === P.i) d.className = "on";
+    el.appendChild(d);
+  }
+}
+function nextProbe(){
+  const P = AS.writeProbe;
+  if(P.i >= P.N || P.i >= P.items.length) return finishAssess();
+  probeProg();
+  const {c} = P.items[P.i], info = CHARS[c];
+  document.getElementById("asBody").innerHTML =
+    '<div class="as-prompt">写一写 · Write this character</div>'+
+    '<div class="wt-prompt"><span class="p1"><span class="t'+info.tone+'">'+info.py+'</span></span>'+
+    '<span class="p2">'+info.en+'</span>'+
+    '<button class="speak" id="asSpeak" style="margin-top:0">🔊</button>'+
+    '<span class="p2">'+(P.i+1)+' / '+P.items.length+'</span></div>'+
+    '<div style="width:min(100%,340px);margin:0 auto">'+
+      '<div class="tzg" id="probeSq" style="width:100%;aspect-ratio:1;position:relative">'+
+      '<div id="probeQuiz" style="position:absolute;inset:0"></div></div></div>'+
+    '<div class="padbtns"><button class="pbtn ghost hz" id="probeSkip">不会写<span class="py">DON\'T KNOW</span></button></div>';
+  document.getElementById("asSpeak").onclick = ()=>speak(c);
+  document.getElementById("probeSkip").onclick = ()=>{
+    const it = P.items[P.i];
+    P.res.push({c:it.c, idx:it.idx, ok:false});
+    advanceProbe(false, it.idx);
+    P.i++; closeProbe(); nextProbe();
+  };
+  const box = document.getElementById("probeQuiz"); box.innerHTML = "";
+  const size = document.getElementById("probeSq").clientWidth || 320;
+  closeProbe();
+  probeWriter = HanziWriter.create(box, c, {
+    width:size, height:size, padding:Math.round(size*0.1),
+    showCharacter:false, showOutline:false, showHintAfterMisses:999,
+    drawingColor:"#2B2723", drawingWidth:Math.max(11, size/28),
+    leniency:1.25, highlightOnComplete:false,
+    charDataLoader:(x,done)=>done(STROKES[x])
+  });
+  probeWriter.quiz({ onComplete: summary => {
+    const n = STROKES[c].strokes.length;
+    const it = P.items[P.i];
+    const ok = summary.totalMistakes <= Math.max(2, Math.floor(n*0.34));
+    P.res.push({c:it.c, idx:it.idx, ok});
+    advanceProbe(ok, it.idx);
+    P.i++; setTimeout(()=>{ closeProbe(); nextProbe(); }, 300);
+  }});
+}
+
+/* ---------- results ---------- */
 function finishAssess(){
-  ADAPT.pos = AS.pos; saveAdapt(); statBump("test",0);
-  const body = document.getElementById("asBody");
+  closeProbe();
+  const P = AS.writeProbe;
+  // highest unit index the child wrote correctly (with one allowed miss below it)
+  const okIdx = P.res.filter(r=>r.ok).map(r=>r.idx).sort((a,b)=>a-b);
+  AS.writePos = okIdx.length ? okIdx[okIdx.length-1] : 0;
+  const L = AS.listen;
+  const listenPct = L.n ? Math.round(L.correct/L.n*100) : 0;
+  // practice starts at the weaker of reading/writing
+  const startPos = Math.max(0, Math.min(AS.readPos, AS.writePos));
+  ADAPT.pos = startPos;
+  ADAPT.placement = {ts:Date.now(), read:AS.readPos, write:AS.writePos, listen:AS.listenPos, listenPct};
+  saveAdapt(); statBump("test",0);
   document.getElementById("asProg").innerHTML = "";
-  body.innerHTML = '<div style="font-size:56px">🎯</div>'+
-    '<div class="pf-h" style="font-size:26px">你的起点 Your starting point</div>'+
-    '<div class="wt-score pass" style="font-size:28px">'+posLabel(ADAPT.pos)+'</div>'+
-    '<div class="pf-sub">The app will guide practice from here — pass writing tests to move up.</div>'+
+  const row = (icon,label,val,note)=>
+    '<div class="wt-wrongrow"><div class="wc">'+icon+'</div><div class="wi"><b>'+label+'</b><br>'+val+
+    (note?'<br><span style="font-size:12px">'+note+'</span>':'')+'</div></div>';
+  document.getElementById("asBody").innerHTML =
+    '<div style="font-size:52px">🎯</div>'+
+    '<div class="pf-h" style="font-size:26px">你的成绩 Your results</div>'+
+    '<div style="text-align:left;max-width:400px;margin:14px auto">'+
+      row("👂","听 Listening", posLabel(AS.listenPos), listenPct+"% correct") +
+      row("👀","读 Reading", posLabel(AS.readPos), "recognising characters") +
+      row("✍️","写 Writing", posLabel(AS.writePos), P.res.filter(r=>r.ok).length+" of "+P.res.length+" written correctly") +
+    '</div>'+
+    '<div class="pf-sub">Practice starts at the level you can <b>write</b>, so reading and writing catch up together.</div>'+
+    '<div class="wt-score pass" style="font-size:26px">'+posLabel(startPos)+'</div>'+
     '<button class="pbtn primary hz" id="asGo">开始学习 →<span class="py">START LEARNING</span></button>';
   document.getElementById("asGo").onclick = ()=>{ writeLvl = UNITS[ADAPT.pos].lvl; show("viewWriteList"); renderUnits(); saveSession(); };
   AS = null;
@@ -1519,7 +1732,7 @@ async function bootApp(){
   let sess = null;
   try{ const s = await stGet("p1-session"); if(s) sess = JSON.parse(s); }catch(e){}
   renderPyGrids();
-  gameNext();
+  gameNext(true);
   if(sess && sess.writeLvl) writeLvl = sess.writeLvl;
   if(sess && sess.readLvl) curReadLvl = sess.readLvl;
   if(sess && sess.dict && sess.dict.unit){
@@ -1798,7 +2011,8 @@ function mergeAdaptive(a,b){
   tests.sort((x,y)=>x.ts-y.ts);
   const pa = (a.pos===null||a.pos===undefined)?-1:a.pos, pb = (b.pos===null||b.pos===undefined)?-1:b.pos;
   const pos = Math.max(pa, pb);
-  return {pos: pos<0?null:pos, wrong, tests: tests.slice(-30)};
+  const pl = ((a.placement&&a.placement.ts)||0) >= ((b.placement&&b.placement.ts)||0) ? a.placement : b.placement;
+  return {pos: pos<0?null:pos, wrong, tests: tests.slice(-30), placement: pl||null};
 }
 function mergeSession(a,b){
   if(!a) return b||null; if(!b) return a;
@@ -1858,7 +2072,7 @@ async function syncNow(pushOnly){
       try{
         const raw = await stGet("p1-progress"); if(raw) progress = JSON.parse(raw);
         const tr = await stGet("p1-tricky"); if(tr) tricky = JSON.parse(tr);
-        const ad = await stGet("p1-adaptive"); if(ad) ADAPT = Object.assign({pos:null,wrong:{},tests:[]}, JSON.parse(ad));
+        const ad = await stGet("p1-adaptive"); if(ad) ADAPT = Object.assign({pos:null,wrong:{},tests:[],placement:null}, JSON.parse(ad));
       }catch(e){}
     }
     await withTimeout(fetch(famUrl(cfg), {method:"PUT", headers:{"Content-Type":"application/json"},
